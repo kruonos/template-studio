@@ -4,6 +4,16 @@ A local-first visual editor for designed documents, landing pages, and email tem
 
 The project is intentionally usable offline. The editor runs in the browser, stores work in `localStorage`, and exports files locally. Optional network features, such as a test-email proxy, are kept outside the core editing flow.
 
+## Screenshots
+
+| Product one-pager | Investor update |
+| --- | --- |
+| ![Product one-pager sample](./samples/screenshots/product-one-pager.png) | ![Investor update sample](./samples/screenshots/investor-update.png) |
+
+| Field report | Conference agenda |
+| --- | --- |
+| ![Field report sample](./samples/screenshots/field-report.png) | ![Conference agenda sample](./samples/screenshots/conference-agenda.png) |
+
 ## Why It Exists
 
 Most page and email builders are block-flow systems. They work well while you stay inside rows, columns, sections, and client-safe tables, but they become fragile when you try to place media freely. Moving one image can trigger a cascade of layout changes.
@@ -111,8 +121,16 @@ Good first areas for contributors are text-layout fixtures, export regression te
 │   ├── TEXT_LAYOUT_GUIDE.md
 │   ├── EXPORT_PIPELINES.md
 │   ├── MODULE_INDEX.md
+│   ├── OPEN_SOURCE.md
+│   ├── LAUNCH.md
 │   └── ROADMAP.md
+├── .github/
+│   ├── workflows/ci.yml
+│   ├── ISSUE_TEMPLATE/
+│   └── pull_request_template.md
 ├── CONTRIBUTING.md
+├── CHANGELOG.md
+├── SECURITY.md
 ├── LICENSE
 ├── package.json
 └── tsconfig.json
@@ -156,8 +174,11 @@ The proxy listens on `http://localhost:3001` and is intended for local developme
 - [Export pipelines](./docs/EXPORT_PIPELINES.md)
 - [Module index](./docs/MODULE_INDEX.md)
 - [Open-source readiness guide](./docs/OPEN_SOURCE.md)
+- [Launch notes](./docs/LAUNCH.md)
 - [Roadmap](./docs/ROADMAP.md)
 - [Contributing](./CONTRIBUTING.md)
+- [Security policy](./SECURITY.md)
+- [Changelog](./CHANGELOG.md)
 
 ## License
 

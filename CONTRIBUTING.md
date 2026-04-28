@@ -99,4 +99,7 @@ When behavior changes, update the relevant doc:
 - [Text layout guide](./docs/TEXT_LAYOUT_GUIDE.md)
 - [Export pipelines](./docs/EXPORT_PIPELINES.md)
 - [Module index](./docs/MODULE_INDEX.md)
+- [Open-source readiness](./docs/OPEN_SOURCE.md)
+- [Launch notes](./docs/LAUNCH.md)
 - [Roadmap](./docs/ROADMAP.md)
+- [Changelog](./CHANGELOG.md)
