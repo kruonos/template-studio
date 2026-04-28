@@ -271,8 +271,39 @@ describe('email export slicing', () => {
 
     const html = buildLegacyEmailHtml(snapshot, createHooks([textElement]))
 
-    expect(html).toContain('Left</td><td width="40"')
+    expect(html).toContain('Left')
+    expect(html).toContain('width="40"')
     expect(html).toContain('Right')
+  })
+
+  test('routed text lines do not drop obstacle images from email export', () => {
+    const textElement = createElement({ id: asElementId('text-routed'), type: 'text', x: 40, y: 20, width: 260, height: 120, content: 'Left of image' })
+    const imageElement = createElement({ id: asElementId('image-routed'), type: 'image', x: 150, y: 20, width: 80, height: 80, content: 'data:image/png;base64,iVBORw0KGgo=' })
+    const snapshot: ExportSnapshot = {
+      templateName: 'Routed',
+      description: '',
+      canvasWidth: 320,
+      pageHeight: 160,
+      pageMargin: 20,
+      canvasHeight: 160,
+      pageCount: 1,
+      surfaceTheme: 'light',
+      wrapMode: 'normal',
+      paperSizeId: 'email',
+      pages: [{
+        pageIndex: 0,
+        items: [
+          createBlockItem(imageElement),
+          createTextLine(asElementId('text-routed'), 'Left line', 40, 24, 58, 96),
+          createTextLine(asElementId('text-routed'), 'Below image', 40, 112, 88, 220),
+        ],
+      }],
+    }
+
+    const result = buildLegacyEmailHtmlDetailed(snapshot, createHooks([textElement, imageElement]))
+
+    expect(result.html).toContain('data:image/png;base64,iVBORw0KGgo=')
+    expect(result.warnings.some(warning => warning.code === 'overlap-dropped' && warning.elementId === imageElement.id)).toBe(false)
   })
 
   test('button export uses the same reduced label size as canvas rendering', () => {

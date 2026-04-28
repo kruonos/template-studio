@@ -18,6 +18,10 @@ Page-builder supports exporting documents to 5 distinct formats, each with diffe
 
 Export-only modules are lazy-loaded. The initial editor shell does not eagerly load PDF, DOCX, GIF, email, MJML, jsPDF, html2canvas, or omggif code. Each heavy exporter enters the browser only when the user chooses the relevant export path.
 
+DOCX prioritizes structured output: text lines become positioned Word text boxes, images are embedded as media relationships, and simple canvas blocks become positioned Word/VML shapes. It should not flatten an entire page into one screenshot.
+
+Email table export uses the projected Pretext line slots rather than the full source text boxes. That matters for obstacle-aware layouts: routed text can sit near an image without causing the image to be treated as an overlapping block and dropped from the email table.
+
 All formats share a **common snapshot architecture**:
 
 ```

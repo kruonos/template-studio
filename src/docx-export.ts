@@ -2,12 +2,11 @@ import type {
   CanvasElement,
   ExportSnapshot,
   ExportSnapshotBlockItem,
-  FlowBlock,
 } from './schema.ts'
-import { buildTableDocxXml, parseTableData } from './table-engine.ts'
+import { parseTableData } from './table-engine.ts'
 import { getRenderableExportPages } from './export-pages.ts'
 import { getSurfacePalette } from './theme.ts'
-import { buildFlowBlocks, type BuildFlowBlocksOptions } from './flow-export.ts'
+import type { BuildFlowBlocksOptions } from './flow-export.ts'
 import { stripHtmlToText, canvasToBlob, loadImageElement } from './content.ts'
 import { toDocxColor } from './utils.ts'
 
@@ -42,25 +41,17 @@ type ZipEntry = {
 }
 
 export async function buildDocxBlob(snapshot: ExportSnapshot, hooks: DocxExportHooks, mimeType: string): Promise<Blob> {
-  const blocks = buildFlowBlocks({
-    ...hooks.buildFlowBlocksOptions,
-    elements: hooks.buildFlowBlocksOptions.elements,
-    pageHeight: snapshot.pageHeight,
-    pageCount: snapshot.pageCount,
-    resolveVariables: hooks.resolveVariables,
-    getButtonHref: hooks.getButtonHref,
-    getImageSource: hooks.getImageSource,
-    getAnimatedGifSource: hooks.getAnimatedGifSource,
-    getMascotSource: hooks.getMascotSource,
-    getVideoHref: hooks.getVideoHref,
-  })
   const now = new Date().toISOString()
-  const media = await collectDocxMedia(blocks)
+  const media = await collectDocxMedia(snapshot, hooks)
   const documentXml = buildDocxDocumentXml(snapshot, media, hooks)
+  return buildDocxPackage(snapshot, media, documentXml, mimeType, now)
+}
+
+function buildDocxPackage(snapshot: ExportSnapshot, media: DocxMedia[], documentXml: string, mimeType: string, timestamp = new Date().toISOString()): Blob {
   const entries = [
     zipEntry('[Content_Types].xml', buildDocxContentTypesXml(media)),
     zipEntry('_rels/.rels', buildDocxRootRelationshipsXml()),
-    zipEntry('docProps/core.xml', buildDocxCoreXml(snapshot.templateName, now)),
+    zipEntry('docProps/core.xml', buildDocxCoreXml(snapshot.templateName, timestamp)),
     zipEntry('docProps/app.xml', buildDocxAppXml()),
     zipEntry('word/document.xml', documentXml),
     zipEntry('word/_rels/document.xml.rels', buildDocxDocumentRelationshipsXml(media)),
@@ -74,22 +65,30 @@ export async function buildDocxBlob(snapshot: ExportSnapshot, hooks: DocxExportH
   return new Blob([arrayBuffer], { type: mimeType })
 }
 
-async function collectDocxMedia(blocks: FlowBlock[]): Promise<DocxMedia[]> {
+async function collectDocxMedia(snapshot: ExportSnapshot, hooks: DocxExportHooks): Promise<DocxMedia[]> {
   const media: DocxMedia[] = []
   let relationshipCounter = 1
-  for (const block of blocks) {
-    if (block.type !== 'image' && block.type !== 'animated-gif' && block.type !== 'mascot') continue
-    const src = block.src
-    if (src === null || src.length === 0) continue
-    const image = await resolveDocxImage(src)
-    if (image === null) continue
-    media.push({
-      blockId: block.id,
-      relationshipId: `rId${relationshipCounter++}`,
-      entryName: `image-${media.length + 1}.png`,
-      bytes: image.bytes,
-      drawingId: media.length + 1,
-    })
+  for (const page of getRenderableExportPages(snapshot)) {
+    for (const item of page.items) {
+      if (item.kind !== 'block') continue
+      const element = item.element
+      if (element.type !== 'image' && element.type !== 'animated-gif' && element.type !== 'mascot') continue
+      const src = element.type === 'image'
+        ? hooks.getImageSource(element)
+        : element.type === 'animated-gif'
+          ? hooks.getAnimatedGifSource(element)
+          : hooks.getMascotSource(element)
+      if (src === null || src.length === 0) continue
+      const image = await resolveDocxImage(src)
+      if (image === null) continue
+      media.push({
+        blockId: element.id,
+        relationshipId: `rId${relationshipCounter++}`,
+        entryName: `image-${media.length + 1}.png`,
+        bytes: image.bytes,
+        drawingId: media.length + 1,
+      })
+    }
   }
   return media
 }
@@ -127,119 +126,164 @@ function buildDocxDocumentXml(snapshot: ExportSnapshot, media: DocxMedia[], hook
   const bodyParts: string[] = []
 
   pages.forEach((page, pageIndex) => {
-    const items = page.items.slice().sort((a, b) => {
-      const deltaY = a.y - b.y
-      if (deltaY !== 0) return deltaY
-      const leftA = a.kind === 'text-line' ? a.x : a.element.x
-      const leftB = b.kind === 'text-line' ? b.x : b.element.x
-      return leftA - leftB
-    })
-    let previousBottom = 0
-
-    for (const item of items) {
-      const spacingBefore = Math.max(0, pxToTwips(item.y - previousBottom))
+    const items = page.items.slice()
+    bodyParts.push(positioningAnchorParagraphXml(items.map((item, itemIndex) => {
       if (item.kind === 'text-line') {
-        bodyParts.push(paragraphXml(item.text, hooks.escapeXml, {
-          size: pxToDocxHalfPoints(item.fontSize),
-          ...(item.fontWeight >= 700 ? { bold: true } : {}),
-          ...(item.fontStyle === 'italic' ? { italic: true } : {}),
-          ...(item.textDecoration === 'underline' ? { underline: true } : {}),
+        return positionedTextBoxXml({
+          id: `text-${page.pageIndex}-${itemIndex}`,
+          x: item.x,
+          y: item.y,
+          width: Math.max(item.slotWidth, item.width, 1),
+          height: item.height,
+          text: item.text,
           fontFamily: item.fontFamily,
+          fontSize: item.fontSize,
+          fontWeight: item.fontWeight,
+          fontStyle: item.fontStyle,
+          lineHeight: item.lineHeight,
           color: toDocxColor(item.color, item.color),
-          ...(spacingBefore > 0 ? { spacingBefore } : {}),
-          indentLeft: pxToTwips(item.x),
-          ...(item.letterSpacing !== 0 ? { letterSpacing: item.letterSpacing } : {}),
-        }))
-        previousBottom = Math.max(previousBottom, item.y + item.height)
-        continue
+          textDecoration: item.textDecoration,
+          zIndex: itemIndex + 1,
+          escapeXml: hooks.escapeXml,
+        })
       }
 
       const element = item.element
-      const indentLeft = pxToTwips(element.x)
       switch (element.type) {
         case 'image':
         case 'animated-gif':
         case 'mascot': {
           const image = mediaByBlockId.get(element.id)
           if (image !== undefined) {
-            bodyParts.push(imageParagraphXml(item, image, hooks.escapeXml, { ...(spacingBefore > 0 ? { spacingBefore } : {}), ...(indentLeft > 0 ? { indentLeft } : {}) }))
-          } else {
-            bodyParts.push(paragraphXml(`[${element.type}]`, hooks.escapeXml, {
-              size: 20,
-              color: '5B6F7F',
-              ...(spacingBefore > 0 ? { spacingBefore } : {}),
-              ...(indentLeft > 0 ? { indentLeft } : {}),
-            }))
+            return positionedImageXml(item, image, hooks.escapeXml, itemIndex + 1)
           }
-          break
+          return positionedTextBoxXml({
+            id: `missing-${page.pageIndex}-${itemIndex}`,
+            x: element.x,
+            y: item.y,
+            width: element.width,
+            height: element.height,
+            text: `[${element.type}]`,
+            fontFamily: 'Arial',
+            fontSize: 12,
+            fontWeight: 600,
+            fontStyle: 'normal',
+            lineHeight: 16,
+            color: '5B6F7F',
+            textDecoration: 'none',
+            zIndex: itemIndex + 1,
+            escapeXml: hooks.escapeXml,
+          })
         }
         case 'button': {
           const href = hooks.getButtonHref(element)
-          bodyParts.push(paragraphXml(`${hooks.resolveVariables(element.content)}${href === null ? '' : ` — ${href}`}`, hooks.escapeXml, {
-            size: pxToDocxHalfPoints(Math.round(hooks.getElementFontSize(element) * 0.9)),
-            bold: true,
+          return positionedTextBoxXml({
+            id: `button-${page.pageIndex}-${itemIndex}`,
+            x: element.x,
+            y: item.y,
+            width: element.width,
+            height: element.height,
+            text: `${hooks.resolveVariables(element.content)}${href === null ? '' : `\n${href}`}`,
             fontFamily: hooks.getElementFontFamily(element),
+            fontSize: Math.round(hooks.getElementFontSize(element) * 0.9),
+            fontWeight: 700,
+            fontStyle: 'normal',
+            lineHeight: Math.max(14, Math.round(hooks.getElementFontSize(element) * 1.2)),
             color: toDocxColor(element.styles.color, palette.buttonText),
-            ...(spacingBefore > 0 ? { spacingBefore } : {}),
-            ...(indentLeft > 0 ? { indentLeft } : {}),
-          }))
-          break
+            textDecoration: element.styles.textDecoration ?? 'none',
+            fillColor: toDocxColor(element.styles.background, palette.buttonBackground),
+            zIndex: itemIndex + 1,
+            escapeXml: hooks.escapeXml,
+          })
         }
         case 'divider':
-          bodyParts.push(paragraphXml('------------------------------------------------------------', hooks.escapeXml, {
-            size: 20,
-            color: toDocxColor(element.styles.color, palette.divider),
-            ...(spacingBefore > 0 ? { spacingBefore } : {}),
-            ...(indentLeft > 0 ? { indentLeft } : {}),
-          }))
-          break
+          return positionedDividerXml(element.x, item.y + element.height / 2, element.width, toDocxColor(element.styles.color, palette.divider), itemIndex + 1)
         case 'spacer':
-          bodyParts.push(paragraphXml('', hooks.escapeXml, {
-            size: 20,
-            ...(spacingBefore + pxToTwips(element.height) > 0 ? { spacingBefore: spacingBefore + pxToTwips(element.height) } : {}),
-            ...(indentLeft > 0 ? { indentLeft } : {}),
-          }))
-          break
+          return ''
         case 'html':
-          bodyParts.push(paragraphXml(stripHtmlToText(hooks.resolveVariables(element.content)), hooks.escapeXml, {
-            size: pxToDocxHalfPoints(hooks.getElementFontSize(element)),
-            ...(element.styles.fontStyle === 'italic' ? { italic: true } : {}),
-            ...(element.styles.textDecoration === 'underline' ? { underline: true } : {}),
+          return positionedTextBoxXml({
+            id: `html-${page.pageIndex}-${itemIndex}`,
+            x: element.x,
+            y: item.y,
+            width: element.width,
+            height: element.height,
+            text: stripHtmlToText(hooks.resolveVariables(element.content)),
             fontFamily: hooks.getElementFontFamily(element),
+            fontSize: hooks.getElementFontSize(element),
+            fontWeight: element.styles.fontWeight ?? 400,
+            fontStyle: element.styles.fontStyle ?? 'normal',
+            lineHeight: Math.max(14, Math.round(hooks.getElementFontSize(element) * 1.45)),
             color: toDocxColor(element.styles.color, palette.body),
-            ...(spacingBefore > 0 ? { spacingBefore } : {}),
-            ...(indentLeft > 0 ? { indentLeft } : {}),
-            ...(element.styles.letterSpacing !== undefined && element.styles.letterSpacing !== 0 ? { letterSpacing: element.styles.letterSpacing } : {}),
-          }))
-          break
+            textDecoration: element.styles.textDecoration ?? 'none',
+            fillColor: toDocxColor(element.styles.background, 'EDF8F6'),
+            zIndex: itemIndex + 1,
+            escapeXml: hooks.escapeXml,
+          })
         case 'video': {
           const href = hooks.getVideoHref(element)
-          bodyParts.push(paragraphXml(href === null ? 'Video block' : `Video: ${href}`, hooks.escapeXml, {
-            size: pxToDocxHalfPoints(hooks.getElementFontSize(element)),
+          return positionedTextBoxXml({
+            id: `video-${page.pageIndex}-${itemIndex}`,
+            x: element.x,
+            y: item.y,
+            width: element.width,
+            height: element.height,
+            text: href === null ? 'Video block' : `Video: ${href}`,
             fontFamily: hooks.getElementFontFamily(element),
+            fontSize: hooks.getElementFontSize(element),
+            fontWeight: 600,
+            fontStyle: 'normal',
+            lineHeight: Math.max(14, Math.round(hooks.getElementFontSize(element) * 1.3)),
             color: toDocxColor(element.styles.color, palette.body),
-            ...(spacingBefore > 0 ? { spacingBefore } : {}),
-            ...(indentLeft > 0 ? { indentLeft } : {}),
-          }))
-          break
+            textDecoration: 'none',
+            fillColor: snapshot.surfaceTheme === 'dark' ? '111A23' : '091019',
+            zIndex: itemIndex + 1,
+            escapeXml: hooks.escapeXml,
+          })
         }
         case 'table': {
           const tableData = parseTableData(element.content)
           if (tableData !== null) {
-            bodyParts.push(buildTableDocxXml(tableData, element.width, tableData.defaultBorder, hooks.resolveVariables, hooks.escapeXml))
-          } else {
-            bodyParts.push(paragraphXml('[Table]', hooks.escapeXml, {
-              size: 20,
-              color: '5B6F7F',
-              ...(spacingBefore > 0 ? { spacingBefore } : {}),
-              ...(indentLeft > 0 ? { indentLeft } : {}),
-            }))
+            return positionedTextBoxXml({
+              id: `table-${page.pageIndex}-${itemIndex}`,
+              x: element.x,
+              y: item.y,
+              width: element.width,
+              height: element.height,
+              text: tableData.cells.map(cell => hooks.resolveVariables(cell.content)).filter(Boolean).join('\n'),
+              fontFamily: hooks.getElementFontFamily(element),
+              fontSize: hooks.getElementFontSize(element),
+              fontWeight: 400,
+              fontStyle: 'normal',
+              lineHeight: Math.max(14, Math.round(hooks.getElementFontSize(element) * 1.3)),
+              color: toDocxColor(element.styles.color, palette.body),
+              textDecoration: 'none',
+              fillColor: 'FFFFFF',
+              zIndex: itemIndex + 1,
+              escapeXml: hooks.escapeXml,
+            })
           }
-          break
+          return positionedTextBoxXml({
+            id: `table-${page.pageIndex}-${itemIndex}`,
+            x: element.x,
+            y: item.y,
+            width: element.width,
+            height: element.height,
+            text: '[Table]',
+            fontFamily: 'Arial',
+            fontSize: 12,
+            fontWeight: 600,
+            fontStyle: 'normal',
+            lineHeight: 16,
+            color: '5B6F7F',
+            textDecoration: 'none',
+            zIndex: itemIndex + 1,
+            escapeXml: hooks.escapeXml,
+          })
         }
+        default:
+          return ''
       }
-      previousBottom = Math.max(previousBottom, item.y + element.height)
-    }
+    }).join('')))
 
     if (pageIndex < pages.length - 1) bodyParts.push(pageBreakParagraphXml())
   })
@@ -249,7 +293,7 @@ function buildDocxDocumentXml(snapshot: ExportSnapshot, media: DocxMedia[], hook
   const marginTwips = Math.round(snapshot.pageMargin * 15)
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
   <w:body>
     ${bodyParts.join('')}
     <w:sectPr>
@@ -260,44 +304,11 @@ function buildDocxDocumentXml(snapshot: ExportSnapshot, media: DocxMedia[], hook
 </w:document>`
 }
 
-function imageParagraphXml(item: ExportSnapshotBlockItem, image: DocxMedia, escapeXml: (text: string) => string, options?: { spacingBefore?: number; indentLeft?: number }): string {
-  const widthEmu = Math.round(Math.max(1, Math.round(item.element.width)) * 9525)
-  const heightEmu = Math.round(Math.max(1, Math.round(item.element.height)) * 9525)
-  const spacingAttrs = [options?.spacingBefore !== undefined ? `w:before="${options.spacingBefore}"` : '', 'w:after="220"'].filter(Boolean).join(' ')
-  const indentXml = options?.indentLeft !== undefined ? `<w:ind w:left="${options.indentLeft}" />` : ''
+function positioningAnchorParagraphXml(content: string): string {
   return `
     <w:p>
-      <w:pPr><w:spacing ${spacingAttrs} />${indentXml}</w:pPr>
-      <w:r>
-        <w:drawing>
-          <wp:inline distT="0" distB="0" distL="0" distR="0">
-            <wp:extent cx="${widthEmu}" cy="${heightEmu}" />
-            <wp:docPr id="${image.drawingId}" name="${escapeXml(image.entryName)}" />
-            <wp:cNvGraphicFramePr />
-            <a:graphic>
-              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
-                <pic:pic>
-                  <pic:nvPicPr>
-                    <pic:cNvPr id="${image.drawingId}" name="${escapeXml(image.entryName)}" />
-                    <pic:cNvPicPr />
-                  </pic:nvPicPr>
-                  <pic:blipFill>
-                    <a:blip r:embed="${image.relationshipId}" />
-                    <a:stretch><a:fillRect /></a:stretch>
-                  </pic:blipFill>
-                  <pic:spPr>
-                    <a:xfrm>
-                      <a:off x="0" y="0" />
-                      <a:ext cx="${widthEmu}" cy="${heightEmu}" />
-                    </a:xfrm>
-                    <a:prstGeom prst="rect"><a:avLst /></a:prstGeom>
-                  </pic:spPr>
-                </pic:pic>
-              </a:graphicData>
-            </a:graphic>
-          </wp:inline>
-        </w:drawing>
-      </w:r>
+      <w:pPr><w:spacing w:before="0" w:after="0" /></w:pPr>
+      <w:r>${content}</w:r>
     </w:p>
   `
 }
@@ -312,37 +323,46 @@ function pageBreakParagraphXml(): string {
   `
 }
 
-function pxToTwips(px: number): number {
-  return Math.max(0, Math.round(px * 15))
+function positionedShapeStyle(x: number, y: number, width: number, height: number, zIndex: number): string {
+  return `position:absolute;margin-left:${pxToPoints(x)}pt;margin-top:${pxToPoints(y)}pt;width:${pxToPoints(width)}pt;height:${pxToPoints(height)}pt;z-index:${zIndex};mso-position-horizontal-relative:page;mso-position-vertical-relative:page`
 }
 
-function pxToDocxHalfPoints(px: number): number {
-  return Math.max(2, Math.round(px * 1.5))
+function positionedTextBoxXml(options: {
+  id: string
+  x: number
+  y: number
+  width: number
+  height: number
+  text: string
+  fontFamily: string
+  fontSize: number
+  fontWeight: number
+  fontStyle: 'normal' | 'italic'
+  lineHeight: number
+  color: string
+  textDecoration: 'none' | 'underline'
+  fillColor?: string
+  zIndex: number
+  escapeXml: (text: string) => string
+}): string {
+  const fillColor = options.fillColor ?? 'none'
+  const lines = options.text.split('\n').map(line => options.escapeXml(line)).join('<br/>')
+  const textDecoration = options.textDecoration === 'underline' ? 'text-decoration:underline;' : ''
+  const fontStyle = options.fontStyle === 'italic' ? 'font-style:italic;' : ''
+  return `<w:pict><v:shape id="${options.escapeXml(options.id)}" type="#_x0000_t202" style="${positionedShapeStyle(options.x, options.y, options.width, options.height, options.zIndex)}" filled="${fillColor === 'none' ? 'f' : 't'}" fillcolor="#${fillColor}" stroked="f"><v:textbox inset="0,0,0,0"><div style="font-family:${options.escapeXml(options.fontFamily)};font-size:${Math.max(1, Math.round(options.fontSize))}px;font-weight:${options.fontWeight};${fontStyle}${textDecoration}line-height:${Math.max(1, Math.round(options.lineHeight))}px;color:#${options.color};mso-line-height-rule:exactly;">${lines}</div></v:textbox></v:shape></w:pict>`
 }
 
-function paragraphXml(text: string, escapeXml: (text: string) => string, options: { size: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string; fontFamily?: string; spacingBefore?: number; spacingAfter?: number; indentLeft?: number; align?: 'left' | 'center' | 'right'; letterSpacing?: number }): string {
-  const safeText = escapeXml(text)
-  const runContent = safeText.length === 0
-    ? '<w:r><w:rPr><w:sz w:val="20" /></w:rPr><w:t></w:t></w:r>'
-    : safeText.split('\n').map((line, index) => `${index === 0 ? '' : '<w:br/>'}<w:t xml:space="preserve">${line}</w:t>`).join('')
-  const spacingAttrs = [options.spacingBefore !== undefined ? `w:before="${options.spacingBefore}"` : '', options.spacingAfter !== undefined ? `w:after="${options.spacingAfter}"` : ''].filter(Boolean).join(' ')
-  return `
-    <w:p>
-      <w:pPr>${spacingAttrs.length === 0 ? '' : `<w:spacing ${spacingAttrs} />`}${options.indentLeft === undefined ? '' : `<w:ind w:left="${options.indentLeft}" />`}${options.align === undefined || options.align === 'left' ? '' : `<w:jc w:val="${options.align}" />`}</w:pPr>
-      <w:r>
-        <w:rPr>
-          ${options.bold ? '<w:b />' : ''}
-          ${options.italic ? '<w:i />' : ''}
-          ${options.underline ? '<w:u w:val="single" />' : ''}
-          ${options.color ? `<w:color w:val="${options.color}" />` : ''}
-          ${options.letterSpacing !== undefined && options.letterSpacing !== 0 ? `<w:spacing w:val="${Math.round(options.letterSpacing * 20)}" />` : ''}
-          <w:rFonts w:ascii="${escapeXml(options.fontFamily ?? 'Georgia')}" w:hAnsi="${escapeXml(options.fontFamily ?? 'Georgia')}" />
-          <w:sz w:val="${options.size}" />
-        </w:rPr>
-        ${runContent}
-      </w:r>
-    </w:p>
-  `
+function positionedImageXml(item: ExportSnapshotBlockItem, image: DocxMedia, escapeXml: (text: string) => string, zIndex: number): string {
+  const element = item.element
+  return `<w:pict><v:shape id="${escapeXml(element.id)}" style="${positionedShapeStyle(element.x, item.y, element.width, element.height, zIndex)}" stroked="f"><v:imagedata r:id="${image.relationshipId}" o:title="${escapeXml(image.entryName)}" /></v:shape></w:pict>`
+}
+
+function positionedDividerXml(x: number, y: number, width: number, color: string, zIndex: number): string {
+  return `<w:pict><v:line from="${pxToPoints(x)}pt,${pxToPoints(y)}pt" to="${pxToPoints(x + width)}pt,${pxToPoints(y)}pt" style="position:absolute;z-index:${zIndex};mso-position-horizontal-relative:page;mso-position-vertical-relative:page" strokecolor="#${color}" strokeweight="1pt" /></w:pict>`
+}
+
+function pxToPoints(px: number): number {
+  return Math.round(px * 75) / 100
 }
 
 function buildDocxContentTypesXml(media: DocxMedia[]): string {

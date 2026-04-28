@@ -387,41 +387,44 @@ function collectRenderableElements(
     if (lines === undefined || lines.length === 0) continue
     const order = elementById.get(elementId)?.index ?? renderables.length
     const sourceElement = elementById.get(elementId)?.element ?? null
-    const lineBounds = getTextBounds(lines)
-    const bounds = clampRect(
-      sourceElement?.x ?? lineBounds.x,
-      lineBounds.y,
-      sourceElement?.width ?? lineBounds.width,
-      lineBounds.height,
-      snapshot.canvasWidth,
-      snapshot.pageHeight,
-    )
-    if (bounds.clipped) {
-      addWarning(warningSink, {
-        code: 'clipped-to-page',
+    const sortedLines = lines.slice().sort((a, b) => a.y - b.y || a.x - b.x)
+    sortedLines.forEach((line, lineIndex) => {
+      const bounds = getTextLineBounds(line, sourceElement)
+      const clippedBounds = clampRect(
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height,
+        snapshot.canvasWidth,
+        snapshot.pageHeight,
+      )
+      if (clippedBounds.clipped) {
+        addWarning(warningSink, {
+          code: 'clipped-to-page',
+          pageIndex: page.pageIndex,
+          elementId,
+          message: `Text element "${elementId}" extends outside the page bounds and was clipped for email export.`,
+        })
+      }
+      renderables.push({
+        id: `${elementId}:line:${lineIndex}`,
+        sourceId: elementId,
+        type: line.elementType,
         pageIndex: page.pageIndex,
-        elementId,
-        message: `Text element "${elementId}" extends outside the page bounds and was clipped for email export.`,
+        order,
+        x: clippedBounds.x,
+        y: clippedBounds.y,
+        width: clippedBounds.width,
+        height: clippedBounds.height,
+        colStart: 0,
+        colSpan: 1,
+        startBand: 0,
+        rowSpan: 1,
+        topOffset: 0,
+        blockItem: null,
+        textLines: [line],
+        element: sourceElement,
       })
-    }
-    renderables.push({
-      id: elementId,
-      sourceId: elementId,
-      type: lines[0]!.elementType,
-      pageIndex: page.pageIndex,
-      order,
-      x: bounds.x,
-      y: bounds.y,
-      width: bounds.width,
-      height: bounds.height,
-      colStart: 0,
-      colSpan: 1,
-      startBand: 0,
-      rowSpan: 1,
-      topOffset: 0,
-      blockItem: null,
-      textLines: lines.slice().sort((a, b) => a.y - b.y || a.x - b.x),
-      element: sourceElement,
     })
   }
 
@@ -434,22 +437,14 @@ function getRenderablePages(snapshot: ExportSnapshot): ExportSnapshotPage[] {
   return snapshot.pages.slice(0, lastNonEmptyIndex + 1)
 }
 
-function getTextBounds(lines: ExportSnapshotTextItem[]): { x: number; y: number; width: number; height: number } {
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  for (const line of lines) {
-    minX = Math.min(minX, line.x)
-    minY = Math.min(minY, line.y)
-    maxX = Math.max(maxX, line.x + Math.max(line.width, line.slotWidth))
-    maxY = Math.max(maxY, line.y + line.lineHeight)
-  }
+function getTextLineBounds(line: ExportSnapshotTextItem, sourceElement: CanvasElement | null): { x: number; y: number; width: number; height: number } {
+  const align = sourceElement?.styles.textAlign ?? 'left'
+  const x = getLineSlotLeft(line, align)
   return {
-    x: Math.round(minX),
-    y: Math.round(minY),
-    width: Math.max(1, Math.round(maxX - minX)),
-    height: Math.max(1, Math.round(maxY - minY)),
+    x: Math.round(x),
+    y: Math.round(line.y),
+    width: Math.max(1, Math.round(line.slotWidth)),
+    height: Math.max(1, Math.round(line.lineHeight)),
   }
 }
 

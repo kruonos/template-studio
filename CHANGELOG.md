@@ -18,6 +18,8 @@ This project uses plain-language release notes while it is pre-1.0.
 ### Changed
 
 - Split export-only libraries out of the initial editor bundle. PDF, DOCX, email/MJML, GIF, jsPDF, html2canvas, and MJML compiler code now load on demand from the relevant export action.
+- Email table export now places text by projected line slots instead of full text boxes, so routed text no longer drops obstacle images.
+- DOCX export now preserves more canvas geometry with positioned Word shapes, text boxes, and embedded image media instead of flattening pages into screenshots.
 
 ### Known Limitations
 
