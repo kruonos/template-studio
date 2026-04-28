@@ -1162,22 +1162,23 @@ function exportDocument(format: ExportFormat): Promise<void> | void {
         showToast('DOCX exported')
       })
     case 'email-html': {
-      const legacyResult = state.emailFormat === 'mjml' ? null : buildLegacyEmailHtmlResult()
-      const html = legacyResult?.html ?? buildEmailHtml()
-      downloadText(`${slugifyFilename(state.templateName)}-email.html`, html, 'text/html')
-      if (legacyResult !== null && legacyResult.warnings.length > 0) {
-        console.warn('Email export warnings', legacyResult.warnings)
-        showToast(`Email HTML exported with ${legacyResult.warnings.length} compatibility warning${legacyResult.warnings.length === 1 ? '' : 's'}`)
-      } else {
-        showToast(state.emailFormat === 'mjml' ? 'Email HTML exported via MJML wrapper' : 'Email HTML exported via sliced tables')
-      }
-      break
+      return (async () => {
+        const legacyResult = state.emailFormat === 'mjml' ? null : await buildLegacyEmailHtmlResult()
+        const html = legacyResult?.html ?? await buildEmailHtml()
+        downloadText(`${slugifyFilename(state.templateName)}-email.html`, html, 'text/html')
+        if (legacyResult !== null && legacyResult.warnings.length > 0) {
+          console.warn('Email export warnings', legacyResult.warnings)
+          showToast(`Email HTML exported with ${legacyResult.warnings.length} compatibility warning${legacyResult.warnings.length === 1 ? '' : 's'}`)
+        } else {
+          showToast(state.emailFormat === 'mjml' ? 'Email HTML exported via MJML wrapper' : 'Email HTML exported via sliced tables')
+        }
+      })()
     }
     case 'email-text': {
-      const text = buildEmailText()
-      downloadText(`${slugifyFilename(state.templateName)}-email.txt`, text, 'text/plain')
-      showToast('Email text exported')
-      break
+      return buildEmailText().then(text => {
+        downloadText(`${slugifyFilename(state.templateName)}-email.txt`, text, 'text/plain')
+        showToast('Email text exported')
+      })
     }
     case 'json': {
       const payload = JSON.stringify({
@@ -2344,22 +2345,22 @@ function buildAbsoluteHtmlDocument(options: { paged: boolean; printable: boolean
   return buildAbsoluteHtmlDocumentController(options, createExportAssemblyHooks())
 }
 
-function buildEmailHtml(): string {
+async function buildEmailHtml(): Promise<string> {
   return buildEmailHtmlController(createExportAssemblyHooks())
 }
 
-function buildLegacyEmailHtml(): string {
+async function buildLegacyEmailHtml(): Promise<string> {
   return buildLegacyEmailHtmlController(createExportAssemblyHooks())
 }
 
-function buildLegacyEmailHtmlResult() {
+async function buildLegacyEmailHtmlResult() {
   return buildLegacyEmailHtmlResultController(createExportAssemblyHooks())
 }
 
 // ---------------------------------------------------------------------------
 // Email-compatible table-based layout engine
 // ---------------------------------------------------------------------------
-function buildEmailText(): string {
+async function buildEmailText(): Promise<string> {
   return buildEmailTextController(createExportAssemblyHooks())
 }
 

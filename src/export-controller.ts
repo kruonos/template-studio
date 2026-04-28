@@ -1,5 +1,4 @@
 import type { CanvasElement, ExportSnapshot } from './schema.ts'
-import { compileMjml } from './mjml-compiler.ts'
 
 type BuildMjmlEmailOptions = {
   snapshot: ExportSnapshot
@@ -8,7 +7,7 @@ type BuildMjmlEmailOptions = {
   getElementFontFamily: (element: CanvasElement) => string
   getElementFontSize: (element: CanvasElement) => number
   getElementFontWeight: (element: CanvasElement) => number
-  buildLegacyHtml: () => string
+  buildLegacyHtml: () => string | Promise<string>
 }
 
 export type EmailHtmlResult = {
@@ -43,9 +42,10 @@ export function buildMjmlWrapperSource(snapshot: ExportSnapshot, breakpoint: num
 </mjml>`
 }
 
-export function buildEmailHtmlWithFallback(options: BuildMjmlEmailOptions): EmailHtmlResult {
-  const legacyHtml = options.buildLegacyHtml()
+export async function buildEmailHtmlWithFallback(options: BuildMjmlEmailOptions): Promise<EmailHtmlResult> {
+  const legacyHtml = await options.buildLegacyHtml()
   try {
+    const { compileMjml } = await import('./mjml-compiler.ts')
     const mjmlSource = buildMjmlWrapperSource(options.snapshot, options.breakpoint, extractBodyHtml(legacyHtml))
     const result = compileMjml(mjmlSource)
     return {

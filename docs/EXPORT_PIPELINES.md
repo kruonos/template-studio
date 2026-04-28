@@ -16,6 +16,8 @@ Page-builder supports exporting documents to 5 distinct formats, each with diffe
 | **DOCX** | ZIP + XML structure | Microsoft Word | Single `.docx` file |
 | **GIF** | Canvas 2D + omggif encoder | Social media, web animation | Single `.gif` file |
 
+Export-only modules are lazy-loaded. The initial editor shell does not eagerly load PDF, DOCX, GIF, email, MJML, jsPDF, html2canvas, or omggif code. Each heavy exporter enters the browser only when the user chooses the relevant export path.
+
 All formats share a **common snapshot architecture**:
 
 ```

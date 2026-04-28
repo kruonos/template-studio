@@ -2,9 +2,9 @@ const EMAIL_PROXY_URL = 'http://localhost:3001'
 
 type EmailTestHooks = {
   templateName: () => string
-  buildEmailHtml: () => string
-  buildEmailText: () => string
-  buildLegacyEmailHtml: () => string
+  buildEmailHtml: () => string | Promise<string>
+  buildEmailText: () => string | Promise<string>
+  buildLegacyEmailHtml: () => string | Promise<string>
   buildAbsoluteHtmlDocument: (options: { paged: boolean; printable: boolean; autoPrint: boolean }) => string
   showToast: (message: string) => void
 }
@@ -39,22 +39,22 @@ export async function sendTestEmail(
 
     switch (format) {
       case 'email-html':
-        html = hooks.buildEmailHtml()
-        text = hooks.buildEmailText()
+        html = await hooks.buildEmailHtml()
+        text = await hooks.buildEmailText()
         break
       case 'email-html-legacy':
-        html = hooks.buildLegacyEmailHtml()
-        text = hooks.buildEmailText()
+        html = await hooks.buildLegacyEmailHtml()
+        text = await hooks.buildEmailText()
         break
       case 'email-text':
-        text = hooks.buildEmailText()
+        text = await hooks.buildEmailText()
         break
       case 'html':
         html = hooks.buildAbsoluteHtmlDocument({ paged: false, printable: false, autoPrint: false })
         break
       default:
-        html = hooks.buildEmailHtml()
-        text = hooks.buildEmailText()
+        html = await hooks.buildEmailHtml()
+        text = await hooks.buildEmailText()
     }
 
     const response = await fetch(`${EMAIL_PROXY_URL}/send`, {

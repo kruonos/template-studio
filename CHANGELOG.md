@@ -15,9 +15,13 @@ This project uses plain-language release notes while it is pre-1.0.
 - Sample templates and screenshots for public demos.
 - Open-source documentation, contribution guide, security policy, issue templates, pull request template, and CI workflow.
 
+### Changed
+
+- Split export-only libraries out of the initial editor bundle. PDF, DOCX, email/MJML, GIF, jsPDF, html2canvas, and MJML compiler code now load on demand from the relevant export action.
+
 ### Known Limitations
 
 - `src/app-controller.ts` is still a transitional compatibility layer and remains the largest module.
 - Browser smoke tests and visual regression tests are not yet in place.
-- Some export paths rely on large browser-side libraries, so the production build currently reports a large chunk warning.
+- The production build still reports a large chunk warning for the lazy MJML compiler chunk, but that code is no longer part of the initial editor load.
 - Email export compatibility still needs a broader client matrix.

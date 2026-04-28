@@ -1,12 +1,5 @@
 import { buildAbsoluteHtmlDocument as buildAbsoluteHtmlDocumentExport } from './html-export.ts'
-import { buildPdfBlob as buildPdfBlobExport } from './pdf-export.ts'
-import { buildDocxBlob as buildDocxBlobExport } from './docx-export.ts'
-import {
-  buildLegacyEmailHtmlDetailed as buildLegacyEmailHtmlDetailedExport,
-  buildEmailText as buildEmailTextExport,
-  type EmailExportResult,
-} from './email-export.ts'
-import { buildEmailHtmlWithFallback } from './export-controller.ts'
+import type { EmailExportResult } from './email-export.ts'
 import type {
   CanvasElement,
   ExportSnapshot,
@@ -92,6 +85,7 @@ export function renderAbsoluteHtmlTableExport(element: CanvasElement, tableData:
 }
 
 export async function buildPdfBlob(hooks: ExportAssemblyHooks): Promise<Blob> {
+  const { buildPdfBlob: buildPdfBlobExport } = await import('./pdf-export.ts')
   return buildPdfBlobExport(hooks.buildExportSnapshot(), {
     importJsPdf: () => import('jspdf'),
     resolveVariables: hooks.resolveVariables,
@@ -133,11 +127,12 @@ export function buildAbsoluteHtmlDocument(
   })
 }
 
-export function buildLegacyEmailHtml(hooks: ExportAssemblyHooks): string {
-  return buildLegacyEmailHtmlResult(hooks).html
+export async function buildLegacyEmailHtml(hooks: ExportAssemblyHooks): Promise<string> {
+  return (await buildLegacyEmailHtmlResult(hooks)).html
 }
 
-export function buildLegacyEmailHtmlResult(hooks: ExportAssemblyHooks): EmailExportResult {
+export async function buildLegacyEmailHtmlResult(hooks: ExportAssemblyHooks): Promise<EmailExportResult> {
+  const { buildLegacyEmailHtmlDetailed: buildLegacyEmailHtmlDetailedExport } = await import('./email-export.ts')
   const snapshot = hooks.buildExportSnapshot()
   return buildLegacyEmailHtmlDetailedExport(snapshot, {
     resolveVariables: hooks.resolveVariables,
@@ -165,9 +160,10 @@ export function buildLegacyEmailHtmlResult(hooks: ExportAssemblyHooks): EmailExp
   })
 }
 
-export function buildEmailHtml(hooks: ExportAssemblyHooks): string {
+export async function buildEmailHtml(hooks: ExportAssemblyHooks): Promise<string> {
   const snapshot = hooks.buildExportSnapshot()
-  if (hooks.state.emailFormat !== 'mjml') return buildLegacyEmailHtmlResult(hooks).html
+  if (hooks.state.emailFormat !== 'mjml') return (await buildLegacyEmailHtmlResult(hooks)).html
+  const { buildEmailHtmlWithFallback } = await import('./export-controller.ts')
   const result = buildEmailHtmlWithFallback({
     snapshot,
     breakpoint: hooks.state.emailBreakpoint,
@@ -175,13 +171,15 @@ export function buildEmailHtml(hooks: ExportAssemblyHooks): string {
     getElementFontFamily: hooks.getElementFontFamily,
     getElementFontSize: hooks.getElementFontSize,
     getElementFontWeight: hooks.getElementFontWeight,
-    buildLegacyHtml: () => buildLegacyEmailHtmlResult(hooks).html,
+    buildLegacyHtml: async () => (await buildLegacyEmailHtmlResult(hooks)).html,
   })
-  if (result.format === 'legacy' && result.warnings.length > 0) hooks.showToast(result.warnings[0]!)
-  return result.html
+  const resolved = await result
+  if (resolved.format === 'legacy' && resolved.warnings.length > 0) hooks.showToast(resolved.warnings[0]!)
+  return resolved.html
 }
 
-export function buildEmailText(hooks: ExportAssemblyHooks): string {
+export async function buildEmailText(hooks: ExportAssemblyHooks): Promise<string> {
+  const { buildEmailText: buildEmailTextExport } = await import('./email-export.ts')
   const snapshot = hooks.buildExportSnapshot()
   return buildEmailTextExport(snapshot, {
     resolveVariables: hooks.resolveVariables,
@@ -208,6 +206,7 @@ export function buildEmailText(hooks: ExportAssemblyHooks): string {
 }
 
 export async function buildDocxBlob(hooks: ExportAssemblyHooks): Promise<Blob> {
+  const { buildDocxBlob: buildDocxBlobExport } = await import('./docx-export.ts')
   const snapshot = hooks.buildExportSnapshot()
   return buildDocxBlobExport(snapshot, {
     resolveVariables: hooks.resolveVariables,

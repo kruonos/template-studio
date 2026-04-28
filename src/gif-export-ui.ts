@@ -1,4 +1,3 @@
-import { exportCanvasAsGif } from './gif-exporter.ts'
 import type { CanvasElement, GifExportParams, StudioState } from './schema.ts'
 
 type GifExportHooks = {
@@ -88,6 +87,7 @@ export async function renderGifExport(hooks: GifExportHooks): Promise<void> {
   hooks.gifExportStatus.className = 'email-test-status'
   hooks.gifExportProgressBar.style.width = '0%'
 
+  const { exportCanvasAsGif } = await import('./gif-exporter.ts')
   const result = await exportCanvasAsGif(params, {
     elements: hooks.state.elements,
     surfaceTheme: hooks.state.surfaceTheme,

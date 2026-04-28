@@ -31,8 +31,8 @@ describe('export controller', () => {
     expect(source).toContain('<mj-raw><table><tr><td>Alpha</td></tr></table></mj-raw>')
   })
 
-  test('compiles consistent email html from the legacy body when mjml succeeds', () => {
-    const result = buildEmailHtmlWithFallback({
+  test('compiles consistent email html from the legacy body when mjml succeeds', async () => {
+    const result = await buildEmailHtmlWithFallback({
       snapshot,
       breakpoint: 480,
       resolveVariables: text => text,
