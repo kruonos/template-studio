@@ -22,7 +22,7 @@ This roadmap keeps the project focused on the thing that makes it different: fre
 
 ## Export Fidelity
 
-- Verify generated HTML, PDF, DOCX, JSON, GIF, and email output from automated fixtures.
+- Verify generated HTML, PDF, ODT/DOCX, JSON, GIF, and email output from automated fixtures.
 - Add visual regression checks for canvas render versus exported output where practical.
 - Expand the email compatibility matrix across Outlook desktop, Outlook web, Gmail, Apple Mail, iOS Mail, Android Gmail, and dark mode.
 - Document known export tradeoffs, especially absolute-positioned HTML and fragmented text extraction in PDF.

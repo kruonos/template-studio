@@ -14,7 +14,8 @@
     "canvas",
     "routed-text",
     "mjml",
-    "pdf"
+    "pdf",
+    "odt"
   ],
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
@@ -23,6 +24,7 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "verify": "bun run check && bun run test && bun run build",
+    "export:audit": "node scripts/export-audit.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "email:proxy": "bun src/email-proxy.ts"
   },

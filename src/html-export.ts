@@ -13,7 +13,7 @@ import { parseTableData } from './table-engine.ts'
 
 type HtmlExportHooks = {
   resolveVariables: (text: string) => string
-  renderAbsoluteHtmlTableExport: (element: CanvasElement, tableData: TableData) => string
+  renderAbsoluteHtmlTableExport: (element: CanvasElement, tableData: TableData, pageTop: number) => string
   getButtonHref: (element: CanvasElement) => string | null
   getElementFontFamily: (element: CanvasElement) => string
   getElementFontSize: (element: CanvasElement) => number
@@ -165,7 +165,7 @@ function renderElementHtmlForExport(
     case 'table': {
       const tableData = parseTableData(element.content)
       if (tableData === null) return `<div style="${style}background:#f8e8e8;display:grid;place-items:center;font:600 13px/1.4 sans-serif;color:#a03030;">Invalid table</div>`
-      return hooks.renderAbsoluteHtmlTableExport(element, tableData)
+      return hooks.renderAbsoluteHtmlTableExport(element, tableData, top)
     }
     default:
       return ''

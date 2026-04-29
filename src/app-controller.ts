@@ -8,6 +8,7 @@ import {
 import {
   DEFAULT_PAPER_SIZE,
   DOCX_MIME,
+  ODT_MIME,
   STORAGE_KEY,
   asElementId,
   createDefaultVariables,
@@ -238,6 +239,7 @@ import {
   buildEmailText as buildEmailTextController,
   buildLegacyEmailHtml as buildLegacyEmailHtmlController,
   buildLegacyEmailHtmlResult as buildLegacyEmailHtmlResultController,
+  buildOdtBlob as buildOdtBlobController,
   buildPdfBlob as buildPdfBlobController,
 } from './export-assembly.ts'
 import { downloadBlob, downloadText } from './browser-download.ts'
@@ -1161,6 +1163,11 @@ function exportDocument(format: ExportFormat): Promise<void> | void {
         downloadBlob(blob, `${slugifyFilename(state.templateName)}.docx`)
         showToast('DOCX exported')
       })
+    case 'odt':
+      return buildOdtBlob().then(blob => {
+        downloadBlob(blob, `${slugifyFilename(state.templateName)}.odt`)
+        showToast('ODT exported for Word-compatible editing')
+      })
     case 'email-html': {
       return (async () => {
         const legacyResult = state.emailFormat === 'mjml' ? null : await buildLegacyEmailHtmlResult()
@@ -2042,6 +2049,7 @@ function createExportAssemblyHooks() {
   return {
     state,
     docxMime: DOCX_MIME,
+    odtMime: ODT_MIME,
     buildExportSnapshot,
     resolveVariables,
     normalizeHref: (value: string) => normalizeSafeUrl(value, 'href'),
@@ -2366,6 +2374,10 @@ async function buildEmailText(): Promise<string> {
 
 async function buildDocxBlob(): Promise<Blob> {
   return buildDocxBlobController(createExportAssemblyHooks())
+}
+
+async function buildOdtBlob(): Promise<Blob> {
+  return buildOdtBlobController(createExportAssemblyHooks())
 }
 
 function mountPresetButtons(): void {

@@ -241,10 +241,10 @@ describe('email export slicing', () => {
 
     expect(html).toContain('<colgroup>')
     expect(html).toContain('Alpha')
-    expect(html).toContain('Beta')
+    expect(html).toContain('>Beta</td>')
     expect(html).toContain('https://example.com/image.png')
     expect(html).not.toContain('src="ignored"')
-    expect(html).toContain('rowspan="2"')
+    expect(html).toContain('rowspan="50"')
   })
 
   test('buildLegacyEmailHtml keeps same-row text fragments side by side', () => {
@@ -356,8 +356,8 @@ describe('email export slicing', () => {
     const tableElement = createElement({
       id: asElementId('table-1'),
       type: 'table',
-      x: 0,
-      y: 0,
+      x: 42,
+      y: 166,
       width: 160,
       height: 60,
       content: JSON.stringify({
@@ -427,6 +427,8 @@ describe('email export slicing', () => {
 
     expect(html).toContain('Cell A')
     expect(html).toContain('Cell B')
+    expect(html).toContain('height:8px')
+    expect(html).not.toContain('height:174px')
     expect(html).toContain('background-color:#f5f7f9')
   })
 

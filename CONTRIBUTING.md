@@ -2,6 +2,8 @@
 
 Thanks for helping improve Pretext Template Studio. The project is a local-first editor, so changes should preserve the core promise: freeform placement, stable routed text, and export fidelity.
 
+Please follow the [Code of conduct](./CODE_OF_CONDUCT.md) when participating.
+
 ## Setup
 
 ```bash
@@ -15,6 +17,12 @@ Before sending changes:
 
 ```bash
 bun run verify
+```
+
+For export or layout changes, also run the browser audit when Playwright is available:
+
+```bash
+bun run export:audit
 ```
 
 Use the individual commands when narrowing failures:
@@ -52,6 +60,7 @@ Every public contribution should include:
 - A short explanation of the user-visible behavior or internal boundary being changed.
 - Tests for deterministic logic, especially layout, persistence, import/export, and schema migration.
 - A note about manual browser coverage when pointer interaction, canvas rendering, downloads, or keyboard shortcuts change.
+- Export-audit results when changing HTML, email, PDF, ODT, DOCX, GIF, table, image, or routed-text output.
 - Documentation updates when behavior, supported formats, setup, or architecture boundaries change.
 
 Avoid broad mixed-purpose pull requests. A good change usually has one of these shapes:
@@ -86,10 +95,11 @@ Email sending is not required for normal development. To test the local SparkPos
 
 ```bash
 SPARKPOST_API=your_key_here
+EMAIL_PROXY_PORT=3001
 bun run email:proxy
 ```
 
-The proxy is a development helper, not production infrastructure.
+The proxy binds to loopback and is a development helper, not production infrastructure. See [Optional email proxy](./docs/OPTIONAL_EMAIL_PROXY.md).
 
 ## Documentation
 
@@ -99,6 +109,7 @@ When behavior changes, update the relevant doc:
 - [Text layout guide](./docs/TEXT_LAYOUT_GUIDE.md)
 - [Export pipelines](./docs/EXPORT_PIPELINES.md)
 - [Module index](./docs/MODULE_INDEX.md)
+- [Optional email proxy](./docs/OPTIONAL_EMAIL_PROXY.md)
 - [Open-source readiness](./docs/OPEN_SOURCE.md)
 - [Launch notes](./docs/LAUNCH.md)
 - [Roadmap](./docs/ROADMAP.md)

@@ -18,7 +18,7 @@ import { getDefaultBackground, getDefaultBorderRadius, getSurfacePalette } from 
 import { sanitizeHtml } from './content.ts'
 import { buildEmailText as buildFlowEmailText, type BuildFlowBlocksOptions } from './flow-export.ts'
 
-const DEFAULT_BAND_HEIGHT = 50
+const DEFAULT_BAND_HEIGHT = 2
 
 export type EmailExportHooks = {
   resolveVariables: (text: string) => string
@@ -767,27 +767,32 @@ function renderProjectedTextTable(
   },
 ): string {
   const rowsByY = groupTextFragmentsByRow(lines, options.originX, options.originY, options.align, options.lineHeight)
+  const boundaries = buildProjectedTextBoundaries(rowsByY, options.boxWidth)
+  const colCount = Math.max(1, boundaries.length - 1)
+  const colgroup = `<colgroup>${boundaries.slice(0, -1).map((left, index) => {
+    const width = Math.max(1, boundaries[index + 1]! - left)
+    return `<col width="${width}" style="width:${width}px;">`
+  }).join('')}</colgroup>`
   const rows: string[] = []
   let cursorY = 0
 
   for (const row of rowsByY) {
     const gap = row.offsetY - cursorY
     if (gap > 0) {
-      rows.push(`<tr><td width="${options.boxWidth}" style="width:${options.boxWidth}px;height:${gap}px;font-size:0;line-height:0;mso-line-height-rule:exactly;">&nbsp;</td></tr>`)
+      rows.push(renderProjectedGapRow(options.boxWidth, gap, colCount))
       cursorY += gap
     }
 
     const rowCells: string[] = []
-    let cursorX = 0
+    let cursorColumn = 0
     for (const fragment of row.fragments) {
-      const leftGap = Math.max(cursorX, clamp(fragment.left, 0, options.boxWidth))
-      const gapWidth = leftGap - cursorX
-      if (gapWidth > 0) {
-        rowCells.push(renderGapCell(gapWidth))
-        cursorX += gapWidth
-      }
+      const fragmentLeft = clamp(fragment.left, 0, options.boxWidth)
+      const fragmentRight = clamp(fragment.left + fragment.width, fragmentLeft + 1, options.boxWidth)
+      const startColumn = findProjectedTextBoundary(boundaries, fragmentLeft)
+      const endColumn = Math.max(startColumn + 1, findProjectedTextBoundary(boundaries, fragmentRight))
+      if (startColumn > cursorColumn) rowCells.push(renderProjectedGapCell(boundaries, cursorColumn, startColumn))
 
-      const lineBoxWidth = clamp(fragment.width, 1, Math.max(1, options.boxWidth - cursorX))
+      const lineBoxWidth = getProjectedColumnSpanWidth(boundaries, startColumn, endColumn)
       const lineStyle = [
         `width:${lineBoxWidth}px`,
         `padding:0`,
@@ -804,17 +809,17 @@ function renderProjectedTextTable(
         options.opacity < 1 ? `opacity:${options.opacity}` : '',
         `white-space:pre`,
       ].filter(Boolean).join(';')
-      rowCells.push(`<td width="${lineBoxWidth}" style="${lineStyle}">${fragment.text.length > 0 ? escapeHtml(fragment.text) : '&nbsp;'}</td>`)
-      cursorX += lineBoxWidth
+      const colspan = endColumn - startColumn
+      rowCells.push(`<td ${colspan > 1 ? `colspan="${colspan}" ` : ''}width="${lineBoxWidth}" style="${lineStyle}">${fragment.text.length > 0 ? escapeHtml(fragment.text) : '&nbsp;'}</td>`)
+      cursorColumn = endColumn
     }
 
-    const rightGap = Math.max(0, options.boxWidth - cursorX)
-    if (rightGap > 0) rowCells.push(renderGapCell(rightGap))
+    if (cursorColumn < colCount) rowCells.push(renderProjectedGapCell(boundaries, cursorColumn, colCount))
     rows.push(`<tr>${rowCells.join('')}</tr>`)
     cursorY = row.offsetY + row.lineHeight
   }
 
-  return `<table role="presentation" width="${options.boxWidth}" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;width:${options.boxWidth}px;table-layout:fixed;">${rows.join('')}</table>`
+  return `<table role="presentation" width="${options.boxWidth}" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;width:${options.boxWidth}px;table-layout:fixed;">${colgroup}${rows.join('')}</table>`
 }
 
 function groupTextFragmentsByRow(
@@ -862,9 +867,45 @@ function getProjectedLineHeight(line: ProjectedTextLine, fallback: number): numb
     : Math.max(1, Math.round(fallback))
 }
 
-function renderGapCell(width: number): string {
+function buildProjectedTextBoundaries(
+  rows: ReturnType<typeof groupTextFragmentsByRow>,
+  boxWidth: number,
+): number[] {
+  const boundaries = new Set<number>([0, Math.max(1, Math.round(boxWidth))])
+  for (const row of rows) {
+    for (const fragment of row.fragments) {
+      const left = clamp(Math.round(fragment.left), 0, Math.max(0, Math.round(boxWidth) - 1))
+      const right = clamp(Math.round(fragment.left + fragment.width), left + 1, Math.round(boxWidth))
+      boundaries.add(left)
+      boundaries.add(right)
+    }
+  }
+  return [...boundaries].sort((a, b) => a - b)
+}
+
+function findProjectedTextBoundary(boundaries: number[], value: number): number {
+  const rounded = Math.round(value)
+  const exact = boundaries.indexOf(rounded)
+  if (exact >= 0) return exact
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    if (rounded >= boundaries[index]! && rounded <= boundaries[index + 1]!) return index
+  }
+  return Math.max(0, boundaries.length - 2)
+}
+
+function getProjectedColumnSpanWidth(boundaries: number[], startColumn: number, endColumn: number): number {
+  return Math.max(1, (boundaries[endColumn] ?? boundaries[boundaries.length - 1] ?? 1) - (boundaries[startColumn] ?? 0))
+}
+
+function renderProjectedGapRow(width: number, height: number, colCount: number): string {
+  return `<tr><td ${colCount > 1 ? `colspan="${colCount}" ` : ''}width="${width}" style="width:${width}px;height:${height}px;font-size:0;line-height:0;mso-line-height-rule:exactly;">&nbsp;</td></tr>`
+}
+
+function renderProjectedGapCell(boundaries: number[], startColumn: number, endColumn: number): string {
+  const colspan = endColumn - startColumn
+  const width = getProjectedColumnSpanWidth(boundaries, startColumn, endColumn)
   if (width <= 0) return '<td width="0" style="width:0;padding:0;font-size:0;line-height:0;mso-line-height-rule:exactly;">&nbsp;</td>'
-  return `<td width="${width}" style="width:${width}px;padding:0;font-size:0;line-height:0;mso-line-height-rule:exactly;">&nbsp;</td>`
+  return `<td ${colspan > 1 ? `colspan="${colspan}" ` : ''}width="${width}" style="width:${width}px;padding:0;font-size:0;line-height:0;mso-line-height-rule:exactly;">&nbsp;</td>`
 }
 
 function renderBlockElement(
@@ -1037,10 +1078,11 @@ function renderProjectedTableElement(
       const textColor = renderState.projection.color
       const textDecoration = renderState.projection.textDecoration as 'none' | 'underline'
       const align = cell.styles.hAlign ?? 'left'
+      const relativeProjection = renderState.projection.lines.every(line => isTableProjectionLineRelative(line, renderState.rect))
       const inner = renderState.projection.lines.length > 0
         ? renderProjectedTextTable(renderState.projection.lines, {
-          originX: 0,
-          originY: 0,
+          originX: relativeProjection ? 0 : element.x + renderState.rect.x,
+          originY: relativeProjection ? 0 : element.y + renderState.rect.y,
           boxWidth: Math.max(1, Math.round(renderState.rect.width)),
           align,
           fontFamily,
@@ -1061,6 +1103,10 @@ function renderProjectedTableElement(
 
   parts.push('</table>')
   return parts.join('')
+}
+
+function isTableProjectionLineRelative(line: TextProjection['lines'][number], rect: { width: number; height: number }): boolean {
+  return line.x >= -1 && line.x <= rect.width + 1 && line.y >= -1 && line.y <= rect.height + 1
 }
 
 function getRoundedColumnWidths(colWidths: number[], totalWidth: number): number[] {

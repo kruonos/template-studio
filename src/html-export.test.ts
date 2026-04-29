@@ -65,4 +65,58 @@ describe('html export', () => {
     expect(html).toContain('border-radius:24px')
     expect(html).toContain('border-radius:18px')
   })
+
+  test('renders paged table blocks with page-local coordinates', () => {
+    const table = createElement({
+      id: asElementId('table-1'),
+      type: 'table',
+      x: 40,
+      y: 620,
+      width: 200,
+      height: 80,
+      content: JSON.stringify({
+        rows: 1,
+        cols: 1,
+        colWidths: [1],
+        rowHeights: [40],
+        cells: [{ row: 0, col: 0, rowspan: 1, colspan: 1, content: 'Visible', styles: {} }],
+        headerRows: 0,
+        defaultBorder: { width: 1, color: '#c0c8d0', style: 'solid' },
+      }),
+    })
+
+    const snapshot: ExportSnapshot = {
+      templateName: 'Paged Table',
+      description: '',
+      canvasWidth: 320,
+      pageHeight: 500,
+      pageMargin: 20,
+      canvasHeight: 1000,
+      pageCount: 2,
+      surfaceTheme: 'light',
+      wrapMode: 'normal',
+      paperSizeId: 'letter-portrait',
+      pages: [
+        { pageIndex: 0, items: [] },
+        { pageIndex: 1, items: [{ kind: 'block', element: table, pageIndex: 1, y: 120 }] },
+      ],
+    }
+
+    const html = buildAbsoluteHtmlDocument(snapshot, { paged: true, autoPrint: false }, {
+      resolveVariables: text => text,
+      renderAbsoluteHtmlTableExport: (_element, _tableData, pageTop) => `<div data-table-y="${pageTop}"></div>`,
+      getButtonHref: element => element.styles.href ?? null,
+      getElementFontFamily: () => 'Arial, sans-serif',
+      getElementFontSize: element => element.styles.fontSize ?? 16,
+      getElementFontWeight: element => element.styles.fontWeight ?? 400,
+      getImageSource: element => element.content || null,
+      getAnimatedGifSource: element => element.content || null,
+      getMascotSource: element => element.content,
+      getVideoHref: element => element.styles.href ?? null,
+      sanitizeHtml: htmlContent => htmlContent,
+    })
+
+    expect(html).toContain('data-table-y="120"')
+    expect(html).not.toContain('data-table-y="620"')
+  })
 })

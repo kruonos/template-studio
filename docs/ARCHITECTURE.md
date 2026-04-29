@@ -2,11 +2,11 @@
 
     ## Overview
 
-    The Pretext Template Studio is a universal template studio for creating multi-page layouts with rich text composition and multi-format exports (HTML, email, PDF, DOCX, GIF). It's a production-quality dogfood application for Pretext's layout engine, exercising real-world text projection, obstacle-aware wrapping, and table cell text rendering.
+    The Pretext Template Studio is a universal template studio for creating multi-page layouts with rich text composition and multi-format exports (HTML, email, PDF, ODT/DOCX, GIF). It is an early but serious dogfood application for Pretext's layout engine, exercising real-world text projection, obstacle-aware wrapping, and table cell text rendering.
 
     **Key stats:**
-    - 64 production TypeScript modules
-    - ~19,900 lines of TypeScript including tests and declarations
+    - 66 production TypeScript modules
+    - ~21,100 lines of TypeScript including tests and declarations
     - Zero external UI framework (vanilla TypeScript + Canvas API)
     - Imports the published `@chenglou/pretext` package plus local `src/wrap-geometry.ts` helpers
     - Open-source preparation target: keep the local editor useful, documented, and verifiable without service credentials
@@ -55,10 +55,10 @@
     │ Feature Layers                                                   │
     ├─────────────────────────────────────────────────────────────────┤
     │ Tables               Animation & Media        Exports            │
-    │ (table-engine.ts)    (animated-media.ts)     (5 formats)        │
+    │ (table-engine.ts)    (animated-media.ts)     (multi-format)      │
     │ (table-ui.ts)        (animation-paths.ts)    (export-assembly.ts)│
     │                      (gif-exporter.ts)       (HTML/email/PDF/   │
-    │                      (mascot-animation.ts)    DOCX/GIF)          │
+    │                      (mascot-animation.ts)    ODT/DOCX/GIF)      │
     └─────────────────────────────────────────────────────────────────┘
                                  ↕
     ┌─────────────────────────────────────────────────────────────────┐
@@ -128,7 +128,7 @@
       • HTML → buildExportSnapshot() → htmlExport()
       • Email → buildExportSnapshot() → emailExport()
       • PDF → buildExportSnapshot() → pdfExport()
-      • DOCX → buildExportSnapshot() → docxExport()
+      • ODT/DOCX → buildExportSnapshot() → document export
       • GIF → buildExportSnapshot() → gifExport() + animation
              ↓
     buildExportSnapshot():
@@ -141,9 +141,9 @@
              ↓
     Format-specific serializer:
       • HTML: Absolute positioning, inline styles, image data URIs
-      • Email: Nested 50px table bands (Outlook compatibility)
+      • Email: Fixed-width presentation tables from projected text lines
       • PDF: jsPDF vector canvas, 96→72 DPI conversion
-      • DOCX: ZIP + XML + media refs, Word-compatible structure
+      • ODT/DOCX: ZIP + XML + media refs, Word-compatible editable structures
       • GIF: Canvas 2D render per frame + omggif encoding
              ↓
     Blob created → download / send
@@ -271,9 +271,9 @@
       ├─ projectTableCellText() → TextProjection in cell bounds
       ├─ Format-specific rendering:
       │  ├─ HTML: <table><tr><td>
-      │  ├─ Email: nested 50px bands with cell text
+      │  ├─ Email: presentation table grid + projected text
       │  ├─ PDF: cell borders + text in jsPDF
-      │  └─ DOCX: table XML + cell content
+      │  └─ ODT/DOCX: document table XML + cell content
       └─ GIF: canvas cell render per frame
     ```
 
@@ -289,11 +289,12 @@
     | **export-pages.ts** | 12 | Multi-page export helper |
     | **html-export.ts** | 168 | HTML serialization (absolute positioning) |
     | **email-export.ts** | 264 | Email template export wrapper |
-    | **email-layout.ts** | 239 | Email layout logic (50px bands) |
-    | **email-proxy.ts** | 119 | Local email proxy (test only; not production-hardened) |
+    | **email-layout.ts** | 239 | Email row and projected-text band grouping |
+    | **email-proxy.ts** | 185 | Loopback-only local email proxy (test only; not production-hardened) |
     | **email-test.ts** | 92 | Email test sender UI |
     | **pdf-export.ts** | 422 | PDF generation (jsPDF) |
-    | **docx-export.ts** | 496 | DOCX generation (ZIP + XML) |
+    | **docx-export.ts** | 681 | DOCX generation (ZIP + XML) |
+    | **odt-export.ts** | 561 | ODT generation (OpenDocument ZIP/XML) |
     | **snapshot-to-mjml.ts** | 499 | Snapshot-to-MJML conversion (email) |
     | **mjml-compiler.ts** | 41 | MJML-to-HTML compiler |
     | **flow-export.ts** | 102 | Flow/outline export (development aid) |
@@ -303,9 +304,10 @@
     | Format | Technology | Architecture | Use Case |
     |--------|-----------|--------------|----------|
     | HTML | CSS absolute positioning | `<style>` + `<div>` | Print-friendly, responsive |
-    | Email | Nested tables (50px bands) | Outlook-safe, inline styles | Email clients |
+    | Email | Fixed-width presentation tables | Inline styles and projected text lines | Email clients |
     | PDF | jsPDF vector canvas | 96→72 DPI conversion | Print, archive, download |
-    | DOCX | ZIP + XML + image refs | Word-compatible structure | Microsoft Office |
+    | ODT | OpenDocument ZIP/XML + image refs | Word-compatible editable frames/tables | Microsoft Office, OpenDocument tools |
+    | DOCX | ZIP + XML + image refs | Word text-box compatibility | Microsoft Office |
     | GIF | Canvas 2D + omggif encoder | Frame-based animation | Social media, web |
 
     ---
@@ -629,7 +631,7 @@
     │   ├── table-engine.ts     # Table model and formulas
     │   ├── browser-download.ts # Testable export download side effects
     │   ├── canvas-*.ts         # Rendering, interactions, overlays
-    │   ├── *-export.ts         # HTML, email, PDF, DOCX, GIF exports
+    │   ├── *-export.ts         # HTML, email, PDF, ODT, DOCX, GIF exports
     │   └── *.test.ts           # Focused Vitest coverage
     ├── docs/
     │   ├── ARCHITECTURE.md
@@ -650,8 +652,9 @@
 
     ### Current State
 
-    - **Focused unit tests** — layout, exports, persistence, cache, browser downloads, and element factory coverage
+    - **Focused unit tests** — layout, exports, persistence, cache, browser downloads, ODT/DOCX package structure, and element factory coverage
     - **Build/type gate** — `bun run verify` runs type check, unit tests, and production build
+    - **Export audit** — `bun run export:audit` drives the real UI, downloads exports, screenshots HTML/email, renders PDF page PNGs when available, and checks ODT/DOCX package contents
     - **No performance profiling** — no heap snapshots or CPU budgets
 
     ### Recommended Approach
@@ -681,7 +684,7 @@
 
     - [ ] Keep shrinking `src/app-controller.ts` through focused, tested extractions
     - [ ] Add browser smoke tests for load, selection, drag/resize, preview widths, and export menus
-    - [ ] Add export fixtures for HTML, email, PDF, DOCX, JSON, and GIF outputs
+    - [ ] Add export fixtures for HTML, email, PDF, ODT/DOCX, JSON, and GIF outputs
     - [ ] Add basic perf markers for canvas render time, projection cache hit rate, and export duration
 
     ### Medium-term (Weeks 3–6)
@@ -748,7 +751,7 @@
 
     ---
 
-    **Last Updated**: Apr 28, 2026  
-    **Architecture Version**: 1.1  
-    **Production TypeScript Modules**: 64  
-    **Total TypeScript Lines**: ~19,900 including tests and declarations
+    **Last Updated**: Apr 28, 2026
+    **Architecture Version**: 1.1
+    **Production TypeScript Modules**: 66
+    **Total TypeScript Lines**: ~21,100 including tests and declarations

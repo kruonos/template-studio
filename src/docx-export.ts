@@ -1,9 +1,12 @@
 import type {
   CanvasElement,
   ExportSnapshot,
-  ExportSnapshotBlockItem,
+  ExportSnapshotItem,
+  ExportSnapshotTextItem,
+  TableCell,
+  TableData,
 } from './schema.ts'
-import { parseTableData } from './table-engine.ts'
+import { cellKey, getCell, parseTableData } from './table-engine.ts'
 import { getRenderableExportPages } from './export-pages.ts'
 import { getSurfacePalette } from './theme.ts'
 import type { BuildFlowBlocksOptions } from './flow-export.ts'
@@ -126,205 +129,194 @@ function buildDocxDocumentXml(snapshot: ExportSnapshot, media: DocxMedia[], hook
   const bodyParts: string[] = []
 
   pages.forEach((page, pageIndex) => {
-    const items = page.items.slice()
-    bodyParts.push(positioningAnchorParagraphXml(items.map((item, itemIndex) => {
-      if (item.kind === 'text-line') {
-        return positionedTextBoxXml({
-          id: `text-${page.pageIndex}-${itemIndex}`,
-          x: item.x,
-          y: item.y,
-          width: Math.max(item.slotWidth, item.width, 1),
-          height: item.height,
-          text: item.text,
-          fontFamily: item.fontFamily,
-          fontSize: item.fontSize,
-          fontWeight: item.fontWeight,
-          fontStyle: item.fontStyle,
-          lineHeight: item.lineHeight,
-          color: toDocxColor(item.color, item.color),
-          textDecoration: item.textDecoration,
-          zIndex: itemIndex + 1,
-          escapeXml: hooks.escapeXml,
-        })
-      }
-
-      const element = item.element
-      switch (element.type) {
-        case 'image':
-        case 'animated-gif':
-        case 'mascot': {
-          const image = mediaByBlockId.get(element.id)
-          if (image !== undefined) {
-            return positionedImageXml(item, image, hooks.escapeXml, itemIndex + 1)
-          }
-          return positionedTextBoxXml({
-            id: `missing-${page.pageIndex}-${itemIndex}`,
-            x: element.x,
-            y: item.y,
-            width: element.width,
-            height: element.height,
-            text: `[${element.type}]`,
-            fontFamily: 'Arial',
-            fontSize: 12,
-            fontWeight: 600,
-            fontStyle: 'normal',
-            lineHeight: 16,
-            color: '5B6F7F',
-            textDecoration: 'none',
-            zIndex: itemIndex + 1,
-            escapeXml: hooks.escapeXml,
-          })
-        }
-        case 'button': {
-          const href = hooks.getButtonHref(element)
-          return positionedTextBoxXml({
-            id: `button-${page.pageIndex}-${itemIndex}`,
-            x: element.x,
-            y: item.y,
-            width: element.width,
-            height: element.height,
-            text: `${hooks.resolveVariables(element.content)}${href === null ? '' : `\n${href}`}`,
-            fontFamily: hooks.getElementFontFamily(element),
-            fontSize: Math.round(hooks.getElementFontSize(element) * 0.9),
-            fontWeight: 700,
-            fontStyle: 'normal',
-            lineHeight: Math.max(14, Math.round(hooks.getElementFontSize(element) * 1.2)),
-            color: toDocxColor(element.styles.color, palette.buttonText),
-            textDecoration: element.styles.textDecoration ?? 'none',
-            fillColor: toDocxColor(element.styles.background, palette.buttonBackground),
-            zIndex: itemIndex + 1,
-            escapeXml: hooks.escapeXml,
-          })
-        }
-        case 'divider':
-          return positionedDividerXml(element.x, item.y + element.height / 2, element.width, toDocxColor(element.styles.color, palette.divider), itemIndex + 1)
-        case 'spacer':
-          return ''
-        case 'html':
-          return positionedTextBoxXml({
-            id: `html-${page.pageIndex}-${itemIndex}`,
-            x: element.x,
-            y: item.y,
-            width: element.width,
-            height: element.height,
-            text: stripHtmlToText(hooks.resolveVariables(element.content)),
-            fontFamily: hooks.getElementFontFamily(element),
-            fontSize: hooks.getElementFontSize(element),
-            fontWeight: element.styles.fontWeight ?? 400,
-            fontStyle: element.styles.fontStyle ?? 'normal',
-            lineHeight: Math.max(14, Math.round(hooks.getElementFontSize(element) * 1.45)),
-            color: toDocxColor(element.styles.color, palette.body),
-            textDecoration: element.styles.textDecoration ?? 'none',
-            fillColor: toDocxColor(element.styles.background, 'EDF8F6'),
-            zIndex: itemIndex + 1,
-            escapeXml: hooks.escapeXml,
-          })
-        case 'video': {
-          const href = hooks.getVideoHref(element)
-          return positionedTextBoxXml({
-            id: `video-${page.pageIndex}-${itemIndex}`,
-            x: element.x,
-            y: item.y,
-            width: element.width,
-            height: element.height,
-            text: href === null ? 'Video block' : `Video: ${href}`,
-            fontFamily: hooks.getElementFontFamily(element),
-            fontSize: hooks.getElementFontSize(element),
-            fontWeight: 600,
-            fontStyle: 'normal',
-            lineHeight: Math.max(14, Math.round(hooks.getElementFontSize(element) * 1.3)),
-            color: toDocxColor(element.styles.color, palette.body),
-            textDecoration: 'none',
-            fillColor: snapshot.surfaceTheme === 'dark' ? '111A23' : '091019',
-            zIndex: itemIndex + 1,
-            escapeXml: hooks.escapeXml,
-          })
-        }
-        case 'table': {
-          const tableData = parseTableData(element.content)
-          if (tableData !== null) {
-            return positionedTextBoxXml({
-              id: `table-${page.pageIndex}-${itemIndex}`,
-              x: element.x,
-              y: item.y,
-              width: element.width,
-              height: element.height,
-              text: tableData.cells.map(cell => hooks.resolveVariables(cell.content)).filter(Boolean).join('\n'),
-              fontFamily: hooks.getElementFontFamily(element),
-              fontSize: hooks.getElementFontSize(element),
-              fontWeight: 400,
-              fontStyle: 'normal',
-              lineHeight: Math.max(14, Math.round(hooks.getElementFontSize(element) * 1.3)),
-              color: toDocxColor(element.styles.color, palette.body),
-              textDecoration: 'none',
-              fillColor: 'FFFFFF',
-              zIndex: itemIndex + 1,
-              escapeXml: hooks.escapeXml,
-            })
-          }
-          return positionedTextBoxXml({
-            id: `table-${page.pageIndex}-${itemIndex}`,
-            x: element.x,
-            y: item.y,
-            width: element.width,
-            height: element.height,
-            text: '[Table]',
-            fontFamily: 'Arial',
-            fontSize: 12,
-            fontWeight: 600,
-            fontStyle: 'normal',
-            lineHeight: 16,
-            color: '5B6F7F',
-            textDecoration: 'none',
-            zIndex: itemIndex + 1,
-            escapeXml: hooks.escapeXml,
-          })
-        }
-        default:
-          return ''
-      }
-    }).join('')))
-
+    const pageFill = toDocxColor(palette.pageBackground, 'FFFFFF')
+    bodyParts.push(positioningAnchorParagraphXml(positionedFillShapeXml(`page-bg-${page.pageIndex}`, 0, 0, snapshot.canvasWidth, snapshot.pageHeight, pageFill, -1, hooks.escapeXml)))
+    bodyParts.push(positioningAnchorParagraphXml(page.items.map((item, itemIndex) => positionedItemXml(item, snapshot, mediaByBlockId, hooks, itemIndex + 1)).join('')))
     if (pageIndex < pages.length - 1) bodyParts.push(pageBreakParagraphXml())
   })
 
   const pgWidthTwips = Math.round(snapshot.canvasWidth * 15)
   const pgHeightTwips = Math.round(snapshot.pageHeight * 15)
-  const marginTwips = Math.round(snapshot.pageMargin * 15)
 
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
   <w:body>
     ${bodyParts.join('')}
     <w:sectPr>
       <w:pgSz w:w="${pgWidthTwips}" w:h="${pgHeightTwips}" />
-      <w:pgMar w:top="${marginTwips}" w:right="${marginTwips}" w:bottom="${marginTwips}" w:left="${marginTwips}" w:header="720" w:footer="720" w:gutter="0" />
+      <w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0" />
     </w:sectPr>
   </w:body>
 </w:document>`
 }
 
 function positioningAnchorParagraphXml(content: string): string {
-  return `
-    <w:p>
-      <w:pPr><w:spacing w:before="0" w:after="0" /></w:pPr>
-      <w:r>${content}</w:r>
-    </w:p>
-  `
+  return `<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr><w:r>${content}</w:r></w:p>`
 }
 
 function pageBreakParagraphXml(): string {
-  return `
-    <w:p>
-      <w:r>
-        <w:br w:type="page" />
-      </w:r>
-    </w:p>
-  `
+  return '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
+}
+
+function positionedItemXml(
+  item: ExportSnapshotItem,
+  snapshot: ExportSnapshot,
+  mediaByBlockId: Map<string, DocxMedia>,
+  hooks: DocxExportHooks,
+  zIndex: number,
+): string {
+  const palette = getSurfacePalette(snapshot.surfaceTheme)
+  if (item.kind === 'text-line') {
+    return positionedTextBoxXml({
+      id: `${item.elementId}-${zIndex}`,
+      x: item.x,
+      y: item.y,
+      width: Math.max(item.slotWidth, item.width, 1),
+      height: Math.max(item.height, item.lineHeight, 1),
+      fillColor: 'none',
+      zIndex,
+      content: renderTextLineParagraphXml(item, hooks.escapeXml),
+      escapeXml: hooks.escapeXml,
+    })
+  }
+
+  const element = item.element
+  switch (element.type) {
+    case 'image':
+    case 'animated-gif':
+    case 'mascot': {
+      const image = mediaByBlockId.get(element.id)
+      if (image !== undefined) return positionedImageXml(element.id, element.x, item.y, element.width, element.height, image, hooks.escapeXml, zIndex)
+      return positionedTextBoxXml({
+        id: `missing-${element.id}`,
+        x: element.x,
+        y: item.y,
+        width: element.width,
+        height: element.height,
+        fillColor: 'none',
+        zIndex,
+        content: textParagraphXml(`[${element.type}]`, {
+          fontFamily: 'Arial',
+          fontSize: 12,
+          fontWeight: 600,
+          fontStyle: 'normal',
+          lineHeight: 16,
+          color: '5B6F7F',
+          align: 'center',
+          escapeXml: hooks.escapeXml,
+        }),
+        escapeXml: hooks.escapeXml,
+      })
+    }
+    case 'button':
+      return positionedTextBoxXml({
+        id: element.id,
+        x: element.x,
+        y: item.y,
+        width: element.width,
+        height: element.height,
+        fillColor: toDocxColor(element.styles.background, palette.buttonBackground),
+        zIndex,
+        insetPx: 12,
+        content: textParagraphXml(hooks.resolveVariables(element.content), {
+          fontFamily: hooks.getElementFontFamily(element),
+          fontSize: Math.max(10, Math.round(hooks.getElementFontSize(element) * 0.9)),
+          fontWeight: element.styles.fontWeight ?? 700,
+          fontStyle: element.styles.fontStyle ?? 'normal',
+          lineHeight: Math.max(14, Math.round(hooks.getElementFontSize(element) * 1.2)),
+          color: toDocxColor(element.styles.color, palette.buttonText),
+          textDecoration: element.styles.textDecoration ?? 'none',
+          align: 'center',
+          escapeXml: hooks.escapeXml,
+        }),
+        escapeXml: hooks.escapeXml,
+      })
+    case 'divider':
+      return positionedDividerXml(element.x, item.y + element.height / 2, element.width, toDocxColor(element.styles.color, palette.divider), zIndex)
+    case 'html':
+      return positionedTextBoxXml({
+        id: element.id,
+        x: element.x,
+        y: item.y,
+        width: element.width,
+        height: element.height,
+        fillColor: toDocxColor(element.styles.background, snapshot.surfaceTheme === 'dark' ? '112633' : 'EDF8F6'),
+        zIndex,
+        insetPx: 16,
+        content: textParagraphXml(stripHtmlToText(hooks.resolveVariables(element.content)), {
+          fontFamily: hooks.getElementFontFamily(element),
+          fontSize: hooks.getElementFontSize(element),
+          fontWeight: element.styles.fontWeight ?? 400,
+          fontStyle: element.styles.fontStyle ?? 'normal',
+          lineHeight: Math.max(14, Math.round(hooks.getElementFontSize(element) * 1.45)),
+          color: toDocxColor(element.styles.color, palette.body),
+          textDecoration: element.styles.textDecoration ?? 'none',
+          align: 'left',
+          escapeXml: hooks.escapeXml,
+        }),
+        escapeXml: hooks.escapeXml,
+      })
+    case 'video': {
+      const href = hooks.getVideoHref(element)
+      return positionedTextBoxXml({
+        id: element.id,
+        x: element.x,
+        y: item.y,
+        width: element.width,
+        height: element.height,
+        fillColor: snapshot.surfaceTheme === 'dark' ? '111A23' : '091019',
+        zIndex,
+        content: textParagraphXml(href === null ? 'Video block' : `Video: ${href}`, {
+          fontFamily: hooks.getElementFontFamily(element),
+          fontSize: hooks.getElementFontSize(element),
+          fontWeight: 600,
+          fontStyle: 'normal',
+          lineHeight: Math.max(14, Math.round(hooks.getElementFontSize(element) * 1.3)),
+          color: snapshot.surfaceTheme === 'dark' ? 'EEF5FB' : 'F2F6F9',
+          align: 'center',
+          escapeXml: hooks.escapeXml,
+        }),
+        escapeXml: hooks.escapeXml,
+      })
+    }
+    case 'table': {
+      const tableData = parseTableData(element.content)
+      const content = tableData === null
+        ? textParagraphXml('Invalid table', {
+          fontFamily: 'Arial',
+          fontSize: 12,
+          fontWeight: 700,
+          fontStyle: 'normal',
+          lineHeight: 16,
+          color: '9F2D26',
+          align: 'center',
+          escapeXml: hooks.escapeXml,
+        })
+        : tableDocxXml(tableData, element, snapshot, hooks)
+      return positionedTextBoxXml({
+        id: element.id,
+        x: element.x,
+        y: item.y,
+        width: element.width,
+        height: element.height,
+        fillColor: 'none',
+        zIndex,
+        content,
+        escapeXml: hooks.escapeXml,
+      })
+    }
+    case 'spacer':
+    default:
+      return ''
+  }
 }
 
 function positionedShapeStyle(x: number, y: number, width: number, height: number, zIndex: number): string {
   return `position:absolute;margin-left:${pxToPoints(x)}pt;margin-top:${pxToPoints(y)}pt;width:${pxToPoints(width)}pt;height:${pxToPoints(height)}pt;z-index:${zIndex};mso-position-horizontal-relative:page;mso-position-vertical-relative:page`
+}
+
+function positionedFillShapeXml(id: string, x: number, y: number, width: number, height: number, fillColor: string, zIndex: number, escapeXml: (text: string) => string): string {
+  return `<w:pict><v:rect id="${escapeXml(id)}" style="${positionedShapeStyle(x, y, width, height, zIndex)}" filled="t" fillcolor="#${fillColor}" stroked="f"/></w:pict>`
 }
 
 function positionedTextBoxXml(options: {
@@ -333,36 +325,209 @@ function positionedTextBoxXml(options: {
   y: number
   width: number
   height: number
-  text: string
+  fillColor: string
+  zIndex: number
+  content: string
+  insetPx?: number | undefined
+  escapeXml: (text: string) => string
+}): string {
+  const inset = pxToPoints(options.insetPx ?? 0)
+  const filled = options.fillColor === 'none' ? 'f' : 't'
+  const fillColor = options.fillColor === 'none' ? '' : ` fillcolor="#${options.fillColor}"`
+  return `<w:pict><v:rect id="${options.escapeXml(options.id)}" style="${positionedShapeStyle(options.x, options.y, options.width, options.height, options.zIndex)}" filled="${filled}"${fillColor} stroked="f"><v:textbox inset="${inset}pt,${inset}pt,${inset}pt,${inset}pt"><w:txbxContent>${options.content}</w:txbxContent></v:textbox></v:rect></w:pict>`
+}
+
+function positionedImageXml(id: string, x: number, y: number, width: number, height: number, image: DocxMedia, escapeXml: (text: string) => string, zIndex: number): string {
+  return `<w:pict><v:rect id="${escapeXml(id)}" style="${positionedShapeStyle(x, y, width, height, zIndex)}" filled="f" stroked="f"><v:imagedata r:id="${image.relationshipId}" o:title="${escapeXml(image.entryName)}"/></v:rect></w:pict>`
+}
+
+function positionedDividerXml(x: number, y: number, width: number, color: string, zIndex: number): string {
+  return `<w:pict><v:line from="${pxToPoints(x)}pt,${pxToPoints(y)}pt" to="${pxToPoints(x + width)}pt,${pxToPoints(y)}pt" style="position:absolute;z-index:${zIndex};mso-position-horizontal-relative:page;mso-position-vertical-relative:page" strokecolor="#${color}" strokeweight="1pt"/></w:pict>`
+}
+
+function renderTextLineParagraphXml(item: ExportSnapshotTextItem, escapeXml: (text: string) => string): string {
+  return textParagraphXml(item.text, {
+    fontFamily: item.fontFamily,
+    fontSize: item.fontSize,
+    fontWeight: item.fontWeight,
+    fontStyle: item.fontStyle,
+    lineHeight: item.lineHeight,
+    color: toDocxColor(item.color, item.color),
+    textDecoration: item.textDecoration,
+    align: 'left',
+    escapeXml,
+  })
+}
+
+function tableDocxXml(tableData: TableData, element: CanvasElement, snapshot: ExportSnapshot, hooks: DocxExportHooks): string {
+  const palette = getSurfacePalette(snapshot.surfaceTheme)
+  const pageFill = toDocxColor(palette.pageBackground, 'FFFFFF')
+  const colPixelWidths = roundedColumnWidths(tableData.colWidths, element.width)
+  const visitedCells = new Set<string>()
+  const parts: string[] = []
+
+  parts.push('<w:tbl>')
+  parts.push(`<w:tblPr><w:tblW w:w="${pxToTwips(element.width)}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr>`)
+  parts.push('<w:tblGrid>')
+  for (const width of colPixelWidths) parts.push(`<w:gridCol w:w="${pxToTwips(width)}"/>`)
+  parts.push('</w:tblGrid>')
+
+  for (let row = 0; row < tableData.rows; row += 1) {
+    const rowHeight = Math.max(1, tableData.rowHeights[row] ?? 1)
+    parts.push(`<w:tr><w:trPr><w:trHeight w:val="${pxToTwips(rowHeight)}" w:hRule="exact"/></w:trPr>`)
+    for (let col = 0; col < tableData.cols; col += 1) {
+      const key = cellKey(row, col)
+      if (visitedCells.has(key)) continue
+      const cell = getCell(tableData, row, col)
+      if (cell === null) continue
+      if (cell.row !== row || cell.col !== col) {
+        visitedCells.add(key)
+        continue
+      }
+      for (let dr = 0; dr < cell.rowspan; dr += 1) {
+        for (let dc = 0; dc < cell.colspan; dc += 1) visitedCells.add(cellKey(row + dr, col + dc))
+      }
+
+      const cellWidth = sumColumnWidths(colPixelWidths, col, cell.colspan)
+      const content = hooks.resolveVariables(cell.content)
+      const bg = getTableCellFill(cell, row, element, pageFill)
+      const color = readableDocxTextColor(toDocxColor(cell.styles.color, palette.body), bg, snapshot.surfaceTheme)
+      const cellContent = textParagraphXml(content, {
+        fontFamily: cell.styles.fontFamily ?? "'Avenir Next','Segoe UI',sans-serif",
+        fontSize: cell.styles.fontSize ?? 13,
+        fontWeight: cell.styles.fontWeight ?? 400,
+        fontStyle: cell.styles.fontStyle ?? 'normal',
+        lineHeight: Math.max(12, Math.round((cell.styles.fontSize ?? 13) * 1.2)),
+        color,
+        align: cell.styles.hAlign ?? 'left',
+        escapeXml: hooks.escapeXml,
+      })
+      parts.push(docxTableCellXml(cell, tableData, cellWidth, bg, cellContent))
+    }
+    parts.push('</w:tr>')
+  }
+
+  parts.push('</w:tbl>')
+  return parts.join('')
+}
+
+function docxTableCellXml(cell: TableCell, tableData: TableData, widthPx: number, fill: string, content: string): string {
+  const colSpanXml = cell.colspan > 1 ? `<w:gridSpan w:val="${cell.colspan}"/>` : ''
+  const vMergeXml = cell.rowspan > 1 ? '<w:vMerge w:val="restart"/>' : ''
+  const vAlign = cell.styles.vAlign === 'middle' ? 'center' : cell.styles.vAlign === 'bottom' ? 'bottom' : 'top'
+  return `<w:tc><w:tcPr><w:tcW w:w="${pxToTwips(widthPx)}" w:type="dxa"/>${colSpanXml}${vMergeXml}<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/><w:vAlign w:val="${vAlign}"/>${tableCellBordersXml(cell, tableData)}<w:tcMar>${tableCellMarginXml(cell.styles.padding ?? 8)}</w:tcMar></w:tcPr>${content}</w:tc>`
+}
+
+function tableCellBordersXml(cell: TableCell, tableData: TableData): string {
+  const borderXml = (edge: 'top' | 'right' | 'bottom' | 'left', tag: string) => {
+    const border = edge === 'top'
+      ? (cell.styles.borderTop ?? tableData.defaultBorder)
+      : edge === 'right'
+        ? (cell.styles.borderRight ?? tableData.defaultBorder)
+        : edge === 'bottom'
+          ? (cell.styles.borderBottom ?? tableData.defaultBorder)
+          : (cell.styles.borderLeft ?? tableData.defaultBorder)
+    if (border.style === 'none' || border.width <= 0) return `<${tag} w:val="none" w:sz="0" w:space="0" w:color="auto"/>`
+    const color = toDocxColor(border.color, 'C9D3DC')
+    const style = border.style === 'dashed' ? 'dashed' : border.style === 'dotted' ? 'dotted' : 'single'
+    return `<${tag} w:val="${style}" w:sz="${Math.max(2, Math.round(border.width * 8))}" w:space="0" w:color="${color}"/>`
+  }
+  return `<w:tcBorders>${borderXml('top', 'w:top')}${borderXml('right', 'w:right')}${borderXml('bottom', 'w:bottom')}${borderXml('left', 'w:left')}</w:tcBorders>`
+}
+
+function tableCellMarginXml(padding: number): string {
+  const value = pxToTwips(Math.min(padding, 4))
+  return `<w:top w:w="${value}" w:type="dxa"/><w:left w:w="${value}" w:type="dxa"/><w:bottom w:w="${value}" w:type="dxa"/><w:right w:w="${value}" w:type="dxa"/>`
+}
+
+function getTableCellFill(cell: TableCell, row: number, element: CanvasElement, pageFill: string): string {
+  if (cell.styles.background !== undefined) return toDocxColor(cell.styles.background, pageFill)
+  if ((element.styles.tableStriped ?? false) && row % 2 === 1) return toDocxColor(element.styles.tableStripeColor, 'F5F7F9')
+  return pageFill
+}
+
+function textParagraphXml(text: string, options: {
   fontFamily: string
   fontSize: number
   fontWeight: number
   fontStyle: 'normal' | 'italic'
   lineHeight: number
   color: string
-  textDecoration: 'none' | 'underline'
-  fillColor?: string
-  zIndex: number
+  textDecoration?: 'none' | 'underline'
+  align?: 'left' | 'center' | 'right'
   escapeXml: (text: string) => string
 }): string {
-  const fillColor = options.fillColor ?? 'none'
-  const lines = options.text.split('\n').map(line => options.escapeXml(line)).join('<br/>')
-  const textDecoration = options.textDecoration === 'underline' ? 'text-decoration:underline;' : ''
-  const fontStyle = options.fontStyle === 'italic' ? 'font-style:italic;' : ''
-  return `<w:pict><v:shape id="${options.escapeXml(options.id)}" type="#_x0000_t202" style="${positionedShapeStyle(options.x, options.y, options.width, options.height, options.zIndex)}" filled="${fillColor === 'none' ? 'f' : 't'}" fillcolor="#${fillColor}" stroked="f"><v:textbox inset="0,0,0,0"><div style="font-family:${options.escapeXml(options.fontFamily)};font-size:${Math.max(1, Math.round(options.fontSize))}px;font-weight:${options.fontWeight};${fontStyle}${textDecoration}line-height:${Math.max(1, Math.round(options.lineHeight))}px;color:#${options.color};mso-line-height-rule:exactly;">${lines}</div></v:textbox></v:shape></w:pict>`
+  const halfPoints = pxToHalfPoints(options.fontSize)
+  const bold = options.fontWeight >= 700 ? '<w:b/>' : ''
+  const italic = options.fontStyle === 'italic' ? '<w:i/>' : ''
+  const underline = options.textDecoration === 'underline' ? '<w:u w:val="single"/>' : ''
+  const fontFamily = options.escapeXml(normalizeDocxFontFamily(options.fontFamily))
+  const align = options.align === 'center' ? 'center' : options.align === 'right' ? 'right' : 'left'
+  const runs = textRunsXml(text, options.escapeXml)
+  return `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="${pxToTwips(options.lineHeight)}" w:lineRule="exact"/><w:jc w:val="${align}"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="${fontFamily}" w:hAnsi="${fontFamily}" w:cs="${fontFamily}"/><w:sz w:val="${halfPoints}"/><w:szCs w:val="${halfPoints}"/>${bold}${italic}${underline}<w:color w:val="${options.color}"/></w:rPr>${runs}</w:r></w:p>`
 }
 
-function positionedImageXml(item: ExportSnapshotBlockItem, image: DocxMedia, escapeXml: (text: string) => string, zIndex: number): string {
-  const element = item.element
-  return `<w:pict><v:shape id="${escapeXml(element.id)}" style="${positionedShapeStyle(element.x, item.y, element.width, element.height, zIndex)}" stroked="f"><v:imagedata r:id="${image.relationshipId}" o:title="${escapeXml(image.entryName)}" /></v:shape></w:pict>`
+function textRunsXml(text: string, escapeXml: (text: string) => string): string {
+  const lines = text.split('\n')
+  return lines.map((line, index) => `${index === 0 ? '' : '<w:br/>'}<w:t xml:space="preserve">${escapeXml(line)}</w:t>`).join('')
 }
 
-function positionedDividerXml(x: number, y: number, width: number, color: string, zIndex: number): string {
-  return `<w:pict><v:line from="${pxToPoints(x)}pt,${pxToPoints(y)}pt" to="${pxToPoints(x + width)}pt,${pxToPoints(y)}pt" style="position:absolute;z-index:${zIndex};mso-position-horizontal-relative:page;mso-position-vertical-relative:page" strokecolor="#${color}" strokeweight="1pt" /></w:pict>`
+function roundedColumnWidths(colWidths: number[], totalWidth: number): number[] {
+  const widths: number[] = []
+  let consumed = 0
+  let cumulative = 0
+  for (let index = 0; index < colWidths.length; index += 1) {
+    cumulative += colWidths[index] ?? 0
+    const edge = index === colWidths.length - 1 ? Math.round(totalWidth) : Math.round(cumulative * totalWidth)
+    widths.push(Math.max(1, edge - consumed))
+    consumed = edge
+  }
+  return widths
+}
+
+function sumColumnWidths(widths: number[], start: number, span: number): number {
+  let total = 0
+  for (let index = start; index < start + span; index += 1) total += widths[index] ?? 0
+  return Math.max(1, total)
+}
+
+function readableDocxTextColor(preferred: string, background: string, surfaceTheme: ExportSnapshot['surfaceTheme']): string {
+  if (contrastRatio(preferred, background) >= 3) return preferred
+  return surfaceTheme === 'dark' ? 'CAD9E5' : '354A5A'
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const fg = relativeLuminance(foreground)
+  const bg = relativeLuminance(background)
+  const light = Math.max(fg, bg)
+  const dark = Math.min(fg, bg)
+  return (light + 0.05) / (dark + 0.05)
+}
+
+function relativeLuminance(color: string): number {
+  const normalized = color.replace('#', '')
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) return 1
+  const channel = (offset: number) => {
+    const value = Number.parseInt(normalized.slice(offset, offset + 2), 16) / 255
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
+}
+
+function normalizeDocxFontFamily(fontFamily: string): string {
+  return fontFamily.split(',')[0]?.trim().replace(/^['"]|['"]$/g, '') || 'Arial'
+}
+
+function pxToTwips(px: number): number {
+  return Math.max(1, Math.round(px * 15))
 }
 
 function pxToPoints(px: number): number {
   return Math.round(px * 75) / 100
+}
+
+function pxToHalfPoints(px: number): number {
+  return Math.max(1, Math.round(px * 1.33))
 }
 
 function buildDocxContentTypesXml(media: DocxMedia[]): string {

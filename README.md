@@ -1,4 +1,4 @@
-# Pretext Template Studio
+#  Template Studio
 
 A local-first visual editor for designed documents, landing pages, and email templates. It uses [Pretext](https://www.npmjs.com/package/@chenglou/pretext) to route text around freely positioned objects, so images, buttons, tables, HTML blocks, and animated media can move without collapsing the rest of the layout.
 
@@ -37,7 +37,7 @@ That is the core trick: freeform placement with deterministic routed text.
 - Animated visual uploads support GIF, SVG, embedded-SVG JSON, and common Lottie/bodymovin JSON as SVG poster frames.
 - Mascots can follow inspector waypoints or hand-drawn walking paths on the canvas.
 - Local persistence with document backups and saved templates.
-- Export pipelines for HTML, email HTML/MJML-style table output, plain-text email, PDF, DOCX, JSON, and GIF.
+- Export pipelines for HTML, email HTML/MJML-style table output, plain-text email, PDF, ODT/DOCX, JSON, and GIF.
 - Optional SparkPost test-email proxy for development.
 
 ## Quick Start
@@ -90,15 +90,25 @@ Or run the full local gate:
 bun run verify
 ```
 
+For export-fidelity work, run the browser audit against a live dev server. This optional command requires Playwright in the local Node resolution path.
+
+```bash
+bun start
+bun run export:audit
+```
+
+The audit downloads HTML, PDF, DOCX, ODT, fallback email HTML, and MJML email HTML from the real UI. It writes browser screenshots, PDF page PNGs when `pdftoppm` is installed, and `audit-summary.json` to your system temp directory. It fails if routed text, table text, embedded images, or ODT/DOCX package contents disappear.
+
 ## Open-Source Status
 
-This repository is being prepared as a serious open-source codebase. The editor is already usable locally, but the public contract is still intentionally conservative:
+This repository is an early open-source release. The editor is already usable locally, but the public contract is intentionally conservative:
 
 - The local-first browser app is the supported entry point.
 - Export fidelity is a core quality bar, not a best-effort extra.
 - The large `src/app-controller.ts` module is a transitional compatibility layer; new behavior should live in focused modules with tests.
 - Public examples should stay runnable without service credentials.
-- Optional services, such as the SparkPost test-email proxy, must stay outside the default editing path.
+- Optional services, such as the SparkPost test-email proxy, stay outside the default editing path.
+- Bugs, browser differences, and layout/export edge cases are expected while the project is pre-1.0.
 
 Good first areas for contributors are text-layout fixtures, export regression tests, sample templates, accessibility improvements, and focused extractions from `src/app-controller.ts`.
 
@@ -129,6 +139,7 @@ Good first areas for contributors are text-layout fixtures, export regression te
 │   ├── ISSUE_TEMPLATE/
 │   └── pull_request_template.md
 ├── CONTRIBUTING.md
+├── CODE_OF_CONDUCT.md
 ├── CHANGELOG.md
 ├── SECURITY.md
 ├── LICENSE
@@ -153,10 +164,11 @@ Good first areas for contributors are text-layout fixtures, export regression te
 
 ## Optional Test Email Proxy
 
-The editor is fully local by default. To test sending generated email output during development, create `.env.local` with:
+The editor is fully local by default. To test sending generated email output during development, copy `.env.example` to `.env.local` and set:
 
 ```bash
 SPARKPOST_API=your_key_here
+EMAIL_PROXY_PORT=3001
 ```
 
 Then run:
@@ -165,7 +177,7 @@ Then run:
 bun run email:proxy
 ```
 
-The proxy listens on `http://localhost:3001` and is intended for local development only.
+The proxy listens on `http://127.0.0.1:3001` by default and is intended for local development only. See [Optional email proxy](./docs/OPTIONAL_EMAIL_PROXY.md).
 
 ## Documentation
 
@@ -173,10 +185,12 @@ The proxy listens on `http://localhost:3001` and is intended for local developme
 - [Text layout guide](./docs/TEXT_LAYOUT_GUIDE.md)
 - [Export pipelines](./docs/EXPORT_PIPELINES.md)
 - [Module index](./docs/MODULE_INDEX.md)
+- [Optional email proxy](./docs/OPTIONAL_EMAIL_PROXY.md)
 - [Open-source readiness guide](./docs/OPEN_SOURCE.md)
 - [Launch notes](./docs/LAUNCH.md)
 - [Roadmap](./docs/ROADMAP.md)
 - [Contributing](./CONTRIBUTING.md)
+- [Code of conduct](./CODE_OF_CONDUCT.md)
 - [Security policy](./SECURITY.md)
 - [Changelog](./CHANGELOG.md)
 

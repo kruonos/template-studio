@@ -10,7 +10,7 @@ export type SurfaceTheme = 'light' | 'dark'
 export type SidebarTab = 'components' | 'templates' | 'variables' | 'layers'
 export type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 export type TextAlign = 'left' | 'center' | 'right'
-export type ExportFormat = 'html' | 'pdf' | 'docx' | 'email-html' | 'email-text' | 'json'
+export type ExportFormat = 'html' | 'pdf' | 'docx' | 'odt' | 'email-html' | 'email-text' | 'json'
 export type EmailExportFormat = 'mjml' | 'legacy'
 
 type Brand<T, Tag extends string> = T & { readonly __brand: Tag }
@@ -470,6 +470,7 @@ export const STORAGE_VERSION = 2
 export const BACKUP_STORAGE_KEY = `${STORAGE_KEY}:backup`
 export const UI_THEME_STORAGE_KEY = `${STORAGE_KEY}:ui-theme`
 export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+export const ODT_MIME = 'application/vnd.oasis.opendocument.text'
 export const IMAGE_MAX_EDGE = 1600
 export const VIEWPORT_WIDTH_BY_MODE: Record<ViewMode, number> = {
   desktop: CANVAS_WIDTH,

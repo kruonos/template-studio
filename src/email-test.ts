@@ -1,4 +1,4 @@
-const EMAIL_PROXY_URL = 'http://localhost:3001'
+const EMAIL_PROXY_URL = 'http://127.0.0.1:3001'
 
 type EmailTestHooks = {
   templateName: () => string

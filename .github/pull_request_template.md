@@ -8,6 +8,7 @@ Describe the user-visible behavior, internal boundary, or documentation area cha
 - [ ] `bun run test`
 - [ ] `bun run build`
 - [ ] Manual browser check, when UI/canvas/export behavior changed
+- [ ] `bun run export:audit`, if export fidelity changed
 
 ## Notes
 

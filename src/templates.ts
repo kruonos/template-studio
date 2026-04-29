@@ -183,7 +183,7 @@ function createLaunchBriefBaseDocument(): StoredDocument {
         y: height + 182,
         width: 320,
         height: 250,
-        content: 'Keep the version history tight. Every save writes a LocalStorage snapshot with a numbered restore point. JSON export is for backup or handoff. DOCX and email exports switch to flow-first structures so downstream tools can edit copy without positioned CSS.',
+        content: 'Keep the version history tight. Every save writes a LocalStorage snapshot with a numbered restore point. JSON export is for backup or handoff. ODT/DOCX and email exports switch to document-friendly structures so downstream tools can edit copy without positioned CSS.',
         styles: { fontSize: 18, color: '#354a5a' },
       },
       {
@@ -278,7 +278,7 @@ function createRenewalEmailBaseDocument(): StoredDocument {
         y: 592,
         width: 620,
         height: 180,
-        content: 'Email export switches to a table-first responsive structure with inlined presentation styles, while DOCX export flattens the same blocks into editable paragraphs. HTML export keeps the positioned canvas exactly as seen here.',
+        content: 'Email export switches to a table-first responsive structure with inlined presentation styles, while ODT/DOCX export rebuilds the same blocks as editable document objects. HTML export keeps the positioned canvas exactly as seen here.',
         styles: { fontSize: 18, color: '#354a5a' },
       },
     ],

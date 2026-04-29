@@ -25,5 +25,5 @@ Include:
 - The editor stores documents in browser `localStorage`.
 - Uploaded images, GIFs, SVGs, and JSON animation files are handled locally by the browser.
 - Exported files may include user-provided content and should be treated as untrusted input by downstream systems.
-- The optional email proxy is for local development only and should not be deployed as production infrastructure.
+- The optional email proxy binds to loopback for local development only and should not be deployed as production infrastructure.
 - Service credentials must stay out of templates, screenshots, commits, and exported sample files.

@@ -110,7 +110,7 @@ function createProductOnePagerBaseDocument(): StoredDocument {
         ['Use case', 'Why it matters', 'Export'],
         ['Launch brief', 'Images can float while text remains readable', 'HTML/PDF'],
         ['Outbound email', 'Same authored canvas can become table-safe email', 'Email HTML'],
-        ['Sales handoff', 'Copy remains editable outside the editor', 'DOCX/JSON'],
+        ['Sales handoff', 'Copy remains editable outside the editor', 'ODT/DOCX/JSON'],
       ], 42, { tableHeaderRows: 1, tableStriped: true, tableStripeColor: '#eef6f4' }),
       text('heading', 42, height + 42, 610, 104, 'How the page stays stable when the artwork moves.', {
         fontWeight: 800,
@@ -201,13 +201,7 @@ function createInvestorUpdateBaseDocument(): StoredDocument {
         fontSize: 34,
         color: '#f3f7fb',
       }),
-      table(42, height + 166, 622, [
-        ['Signal', 'Current', 'Read'],
-        ['Weekly active templates', '+31 percent', 'Healthy creator repeat use'],
-        ['Export completion rate', '86 percent', 'Most sessions end in a file'],
-        ['Support tagged layout collapse', '-44 percent', 'Routing reduces manual fixes'],
-        ['Median PDF generation', '1.8s', 'Acceptable for launch samples'],
-      ], 44, { tableHeaderRows: 1, tableStriped: true, tableStripeColor: '#0f1f2b' }),
+      investorIndicatorsTable(height),
       text('image', 42, height + 438, 248, 220, 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1000&q=82', {
         borderRadius: 22,
       }),
@@ -223,6 +217,31 @@ function createInvestorUpdateBaseDocument(): StoredDocument {
       }),
     ],
   })
+}
+
+function investorIndicatorsTable(pageHeight: number): StoredCanvasElement {
+  const element = table(42, pageHeight + 166, 622, [
+    ['Signal', 'Current', 'Read'],
+    ['Weekly active templates', '+31 percent', 'Healthy creator repeat use'],
+    ['Export completion rate', '86 percent', 'Most sessions end in a file'],
+    ['Support tagged layout collapse', '-44 percent', 'Routing reduces manual fixes'],
+    ['Median PDF generation', '1.8s', 'Acceptable for launch samples'],
+  ], 44, { tableHeaderRows: 1, tableStriped: true, tableStripeColor: '#0f1f2b' })
+
+  if (element.type === 'table') {
+    element.content = {
+      ...element.content,
+      cells: element.content.cells.map(cell => ({
+        ...cell,
+        styles: {
+          ...cell.styles,
+          color: cell.row === 0 ? '#17384f' : '#cad9e5',
+        },
+      })),
+    }
+  }
+
+  return element
 }
 
 function createFieldReportBaseDocument(): StoredDocument {

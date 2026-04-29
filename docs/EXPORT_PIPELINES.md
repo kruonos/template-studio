@@ -1,26 +1,29 @@
 # Export Pipelines Guide
 
-**Detailed reference for all 5 export formats: HTML, Email (MJML), PDF, DOCX, and GIF.**
+**Detailed reference for the main export formats: HTML, Email (MJML / fallback tables), PDF, DOCX, ODT, JSON, and GIF.**
 
 ---
 
 ## Overview
 
-Page-builder supports exporting documents to 5 distinct formats, each with different strengths and target use cases:
+Page-builder supports exporting documents to multiple formats, each with different strengths and target use cases:
 
 | Format | Technology | Use Case | Output |
 |--------|-----------|----------|--------|
 | **HTML** | CSS absolute positioning | Web, print-to-PDF, email | Single `.html` file |
 | **Email** | Nested tables + MJML | Email clients (Outlook) | `.html` + test send |
 | **PDF** | jsPDF canvas | Print, archive, download | Single `.pdf` file |
-| **DOCX** | ZIP + XML structure | Microsoft Word | Single `.docx` file |
+| **DOCX** | OpenXML package | Microsoft Word text-box compatibility | Single `.docx` file |
+| **ODT** | OpenDocument package | Word-compatible editable fallback for designed documents | Single `.odt` file |
 | **GIF** | Canvas 2D + omggif encoder | Social media, web animation | Single `.gif` file |
 
-Export-only modules are lazy-loaded. The initial editor shell does not eagerly load PDF, DOCX, GIF, email, MJML, jsPDF, html2canvas, or omggif code. Each heavy exporter enters the browser only when the user chooses the relevant export path.
+Export-only modules are lazy-loaded. The initial editor shell does not eagerly load PDF, DOCX, ODT, GIF, email, MJML, jsPDF, html2canvas, or omggif code. Each heavy exporter enters the browser only when the user chooses the relevant export path.
 
-DOCX prioritizes structured output: text lines become positioned Word text boxes, images are embedded as media relationships, and simple canvas blocks become positioned Word/VML shapes. It should not flatten an entire page into one screenshot.
+DOCX remains available for users who need `.docx`, but the Word-compatible editable path is now ODT. The ODT exporter writes a real OpenDocument package: positioned draw frames, text boxes, embedded PNG media, page-sized backgrounds, and real `table:table` structures. It should not flatten an entire page into one screenshot.
 
 Email table export uses the projected Pretext line slots rather than the full source text boxes. That matters for obstacle-aware layouts: routed text can sit near an image without causing the image to be treated as an overlapping block and dropped from the email table.
+
+For manual release checks, `bun run export:audit` drives the real browser UI with Playwright, downloads HTML/PDF/DOCX/ODT/fallback-email/MJML-email outputs, captures screenshots for the browser-rendered outputs, renders PDF page PNGs when `pdftoppm` is installed, and validates that routed text, table text, embedded images, and editable document package contents are present.
 
 All formats share a **common snapshot architecture**:
 
@@ -332,34 +335,29 @@ Email-safe HTML using nested tables (Outlook compatibility) or MJML framework.
 ExportSnapshot
     ↓
 email-export.ts: emailExport()
-    ├─ snapshot-to-mjml.ts: snapshotToMjml()
-    │   └─ Convert to MJML format
-    ├─ mjml-compiler.ts: compileMjml()
-    │   └─ MJML → responsive HTML
-    └─ email-layout.ts: buildEmailTableLayout()
-        └─ Nested 50px table bands
+    ├─ email-layout.ts: buildEmailLayoutRows()
+    │   └─ Group blocks and projected text-line bands
+    ├─ email-export.ts
+    │   └─ Build fixed-width presentation tables
+    └─ snapshot-to-mjml.ts / mjml-compiler.ts
+        └─ Optional MJML wrapper compilation
     ↓
 .html file (send via email provider)
 ```
 
-### Strategy: 50px Table Bands
+### Strategy: Projected-Line Table Grid
 
-Most email clients support nested HTML tables. We divide the layout into 50px horizontal bands:
+Most email clients support presentation tables more consistently than arbitrary CSS layout. The exporter keeps the authored canvas width, turns element edges and projected text-line boundaries into a deterministic table grid, and renders text from the actual Pretext export snapshot instead of reflowing source text boxes.
 
 ```
 Document Layout:           → Table Layout:
 ┌─────────────────────┐
-│ Heading (0-100px)   │      <tr><td height=50>...</td></tr>
-│                     │      <tr><td height=50>...</td></tr>  ← Heading
+│ Heading             │      <tr><td colspan=...>Heading</td></tr>
 ├─────────────────────┤
-│ Image (100-300px)   │      <tr><td height=50>...</td></tr>
-│                     │      <tr><td height=50>...</td></tr>  ← Image
-│                     │      <tr><td height=50>...</td></tr>
+│ Image + text        │      <tr><td>Image</td><td>Projected line</td></tr>
+│                     │      <tr><td>Image</td><td>Projected line</td></tr>
 ├─────────────────────┤
-│ Body (300-600px)    │      <tr><td height=50>...</td></tr>
-│                     │      <tr><td height=50>...</td></tr>  ← Body
-│                     │      <tr><td height=50>...</td></tr>
-│                     │      <tr><td height=50>...</td></tr>
+│ Table block         │      <tr><td colspan=...><table>...</table></td></tr>
 └─────────────────────┘
 ```
 
@@ -367,76 +365,22 @@ Document Layout:           → Table Layout:
 
 ```typescript
 async function emailExport(snapshot: ExportSnapshot): Promise<Blob> {
-  // Approach 1: MJML compilation (recommended)
-  const mjml = snapshotToMjml(snapshot)
-  const html = await compileMjml(mjml)
-  
-  // Approach 2: Direct table layout (fallback)
-  // const html = buildEmailTableLayout(snapshot)
-  
-  const blob = new Blob([html], {type: 'text/html'})
-  return blob
+  const pages = getRenderableExportPages(snapshot)
+  const html = pages.map(page => renderEmailPage(snapshot, page)).join('')
+  return new Blob([html], { type: 'text/html' })
 }
 
-function buildEmailTableLayout(snapshot: ExportSnapshot): string {
-  const page = snapshot.pages[0]  // Email = single page
-  const bandHeight = 50
-  const totalHeight = Math.ceil(page.height / bandHeight)
-  
-  let html = '<table cellpadding="0" cellspacing="0" width="100%">\n'
-  
-  for (let band = 0; band < totalHeight; band++) {
-    const bandY = band * bandHeight
-    const bandEndY = bandY + bandHeight
-    
-    // Find items that overlap this band
-    const itemsInBand = page.items.filter(item =>
-      item.y < bandEndY && item.y + item.height > bandY
-    )
-    
-    html += '<tr>\n'
-    html += `<td height="${bandHeight}" valign="top">\n`
-    
-    // Render items in band (simplified)
-    for (const item of itemsInBand) {
-      const topOffset = Math.max(0, item.y - bandY)
-      const bottomOffset = Math.max(0, bandEndY - (item.y + item.height))
-      
-      html += `<div style="margin-top: ${topOffset}px; margin-bottom: ${bottomOffset}px;">`
-      html += serializeItemForEmail(item)
-      html += '</div>\n'
-    }
-    
-    html += '</td>\n</tr>\n'
-  }
-  
-  html += '</table>'
-  return html
+function renderEmailPage(snapshot: ExportSnapshot, page: ExportSnapshotPage): string {
+  const grid = buildEmailGrid(snapshot, page)
+  return `<table role="presentation" width="${snapshot.canvasWidth}" style="table-layout:fixed">${renderRows(grid)}</table>`
 }
 
-function serializeItemForEmail(item: ExportItem): string {
-  // Inline styles only (no <style> tag in email)
-  // Limited CSS support
-  
-  if (item.type === 'text') {
-    const projection = item.content as TextProjection
-    let html = '<p style="margin: 0; padding: 0;">'
-    for (const line of projection.lines) {
-      html += `<div style="font-family: ${projection.font}; font-size: ${projection.fontSize}px; color: ${projection.color}; line-height: ${projection.lineHeight}px;">`
-      html += escapeHtml(line.text)
-      html += '</div>'
-    }
-    html += '</p>'
-    return html
+function buildEmailGrid(snapshot: ExportSnapshot, page: ExportSnapshotPage): EmailGrid {
+  for (const item of page.items) {
+    // Block items contribute geometry edges.
+    // Text-line items contribute their projected line boxes.
+    // Table blocks render as nested real tables.
   }
-  
-  if (item.type === 'image') {
-    // Embed or reference image
-    const src = generateImageSrc(item.content, 'email')
-    return `<img src="${src}" width="${item.width}" height="${item.height}" style="display: block;" />`
-  }
-  
-  return ''
 }
 ```
 
@@ -507,12 +451,12 @@ function serializeItemForEmail(item: ExportItem): string {
 
 ```typescript
 // email-test.ts
-async function sendTestEmail(to: string, html: string): Promise<void> {
-  // WARNING: email-proxy.ts not production-hardened
-  const response = await fetch('http://localhost:3001/send-email', {
+async function sendTestEmail(from: string, to: string, html: string): Promise<void> {
+  // Development helper only. The proxy binds to 127.0.0.1.
+  const response = await fetch('http://127.0.0.1:3001/send', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({to, html})
+    body: JSON.stringify({from, to, html})
   })
   
   if (!response.ok) {
@@ -658,27 +602,41 @@ Example:
 
 ---
 
-## Export Format 4: DOCX
+## Export Format 4: ODT / DOCX
 
 ### Purpose
 
-Microsoft Word document (.docx format = ZIP + XML).
+Word-compatible editable document export. ODT is the preferred editable path because it can represent positioned draw frames, text boxes, tables, and embedded images without turning the page into a bitmap. DOCX remains available for `.docx` workflows.
 
 ### Architecture
 
 ```
 ExportSnapshot
+    ├─ odt-export.ts: OpenDocument package
+    │   ├─ content.xml with positioned draw frames
+    │   ├─ styles.xml page layout
+    │   ├─ META-INF/manifest.xml
+    │   └─ Pictures/ embedded media
+    └─ docx-export.ts: OpenXML package
+        ├─ word/document.xml
+        ├─ word/media/
+        └─ docProps/
     ↓
-docx-export.ts: docxExport()
-    ├─ Lazy import JSZip
-    ├─ Build XML structure
-    │   ├─ [Content_Types].xml
-    │   ├─ word/document.xml (content)
-    │   ├─ word/media/ (images)
-    │   └─ docProps/ (metadata)
-    └─ Create ZIP blob
-    ↓
-Single .docx file
+Single `.odt` or `.docx` file
+```
+
+### ODT Structure
+
+```
+document.odt (ZIP file)
+├── mimetype
+├── content.xml                  # Positioned draw frames, text boxes, tables
+├── styles.xml                   # Page layout
+├── meta.xml                     # Title and generator metadata
+├── META-INF/manifest.xml
+└── Pictures/
+    ├── image-1.png
+    └── image-2.png
 ```
 
 ### DOCX Structure
@@ -1017,7 +975,8 @@ function showGifExportPanel(): void {
 | **HTML** | 100-200ms | Page count, image embedding |
 | **Email** | 150-300ms | MJML compilation, layout carving |
 | **PDF** | 200-500ms | jsPDF lazy import, DPI conversion |
-| **DOCX** | 300-700ms | JSZip compression, XML building |
+| **ODT** | 300-900ms | Image embedding, XML package building |
+| **DOCX** | 300-700ms | Image embedding, XML package building |
 | **GIF** | 5-30s | Animation length, palette quantization, encoding |
 
 ### File Size Comparison
@@ -1027,7 +986,8 @@ function showGifExportPanel(): void {
 | **HTML** | 200KB-2MB | Images (data URIs), text content |
 | **Email** | 150KB-1.5MB | Table nesting overhead, images |
 | **PDF** | 100KB-500KB | Vector compression, image embedding |
-| **DOCX** | 100KB-600KB | ZIP compression, XML overhead |
+| **ODT** | 100KB-2MB | Embedded images, XML overhead |
+| **DOCX** | 100KB-600KB | Embedded images, XML overhead |
 | **GIF** | 50KB-5MB | Animation length, palette size |
 
 ### Memory Usage
@@ -1038,7 +998,7 @@ function showGifExportPanel(): void {
 // - HTML: 1-2MB
 // - Email: 2-5MB
 // - PDF: 5-10MB (jsPDF overhead)
-// - DOCX: 2-5MB
+// - ODT/DOCX: 2-5MB
 // - GIF: 50-200MB (all frames in memory)
 ```
 
@@ -1083,11 +1043,11 @@ async function emailExport(snapshot) {
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — System overview
 - [MODULE_INDEX.md](./MODULE_INDEX.md#exports) — Export modules
-- Export modules: `html-export.ts`, `email-export.ts`, `pdf-export.ts`, `docx-export.ts`, `gif-exporter.ts`
+- Export modules: `html-export.ts`, `email-export.ts`, `pdf-export.ts`, `odt-export.ts`, `docx-export.ts`, `gif-exporter.ts`
 
 ---
 
 **Last Updated**: Apr 22, 2026
-**Supported Formats**: HTML, Email (MJML), PDF (jsPDF), DOCX (JSZip), GIF (omggif)
-**Performance Target**: < 1s for HTML/Email/PDF/DOCX, < 30s for GIF
+**Supported Formats**: HTML, Email (MJML), PDF (jsPDF), ODT/DOCX, GIF (omggif)
+**Performance Target**: < 1s for HTML/Email/PDF/ODT/DOCX, < 30s for GIF
 **File Size Limit**: Depends on browser (typically 100MB+)

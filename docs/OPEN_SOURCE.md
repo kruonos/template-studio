@@ -14,7 +14,8 @@ This project should be useful to people who want to study, extend, or reuse a lo
 
 - SaaS hosting, accounts, billing, or collaboration.
 - Perfect email rendering in every client.
-- Pixel-identical parity across HTML, email, PDF, DOCX, and GIF for every possible document.
+- Pixel-identical parity across HTML, email, PDF, ODT/DOCX, and GIF for every possible document.
+- A production backend; the included email proxy is only a loopback development helper.
 - A stable plugin API.
 - A fully migrated controller layer.
 
@@ -55,17 +56,19 @@ Before making the repository public:
 
 - `bun run verify` passes on a clean checkout.
 - The app loads at `http://localhost:3000/` after `bun start`.
+- `bun run export:audit` passes when Playwright is available, with screenshots reviewed for HTML and email output.
 - At least one sample template opens through `?preset=product-one-pager`.
 - Export menus open without network credentials.
 - README screenshots match the current UI.
 - Stale architecture claims have been removed.
 - Known limitations are documented rather than hidden.
-- License, contribution guide, and roadmap are present.
+- License, contribution guide, code of conduct, security policy, and roadmap are present.
+- Optional service configuration is documented through `.env.example` and `docs/OPTIONAL_EMAIL_PROXY.md`.
 
 ## Useful First Issues
 
 - Add browser smoke tests for load, selection, drag, preview-width switching, and export menu opening.
-- Add export fixtures for HTML, email HTML, PDF metadata, DOCX structure, JSON, and GIF frame count.
+- Add export fixtures for HTML, email HTML, PDF metadata, ODT/DOCX structure, JSON, and GIF frame count.
 - Add visual regression checks for canvas render versus exported output where practical.
 - Extract a narrow controller behavior into a focused module with tests.
 - Improve accessibility for keyboard canvas actions and inspector controls.

@@ -4,7 +4,22 @@ import { convertVectorJsonToSvg, svgTextToDataUrl } from './vector-json.ts'
 export function stripHtmlToText(html: string): string {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
-  return doc.body.textContent?.trim() ?? ''
+  return collectTextWithBreaks(doc.body)
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function collectTextWithBreaks(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+  if (!(node instanceof HTMLElement || node instanceof HTMLBodyElement)) return ''
+
+  if (node.tagName === 'BR') return '\n'
+  const blockTags = new Set(['ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DD', 'DIV', 'DL', 'DT', 'FIGCAPTION', 'FIGURE', 'FOOTER', 'FORM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HEADER', 'HR', 'LI', 'MAIN', 'NAV', 'OL', 'P', 'PRE', 'SECTION', 'TABLE', 'TBODY', 'TD', 'TH', 'THEAD', 'TR', 'UL'])
+  const childText = Array.from(node.childNodes).map(collectTextWithBreaks).join('')
+  if (!blockTags.has(node.tagName)) return childText
+  return `\n${childText}\n`
 }
 
 export function sanitizeHtml(rawHtml: string): string {

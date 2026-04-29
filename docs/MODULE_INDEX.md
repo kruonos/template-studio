@@ -4,10 +4,10 @@ This index is a contributor map for the current Template Studio codebase. It fav
 
 Current shape:
 
-- 64 production TypeScript modules in `src/`
-- 10 test/support TypeScript files
+- 66 production TypeScript modules in `src/`
+- 12 test TypeScript files
 - `src/main.ts` is a 3-line bootstrapper
-- `src/app-controller.ts` is the largest remaining compatibility layer at about 2,535 lines
+- `src/app-controller.ts` is the largest remaining compatibility layer at about 2,548 lines
 
 ## Entry And Orchestration
 
@@ -89,7 +89,7 @@ Current shape:
 | `export-snapshot.ts` | Stable render snapshot used by all export formats. |
 | `export-controller.ts` | Email export fallback coordination. |
 | `export-pages.ts` | Page slicing helpers. |
-| `flow-export.ts` | Flow block extraction for email/DOCX-style output. |
+| `flow-export.ts` | Flow block extraction for email/document-style output. |
 | `html-export.ts` | Absolute-positioned HTML export. |
 | `email-layout.ts` | Email layout primitives. |
 | `email-export.ts` | Sliced table email HTML and plain-text email output. |
@@ -97,9 +97,16 @@ Current shape:
 | `mjml-compiler.ts` | Browser MJML compilation wrapper. |
 | `pdf-export.ts` | jsPDF export. |
 | `docx-export.ts` | DOCX ZIP/XML export. |
+| `odt-export.ts` | OpenDocument Text ZIP/XML export for Word-compatible editing. |
 | `browser-download.ts` | Testable browser download helper used by export actions. |
 | `email-test.ts` | Test-email dialog controller. |
-| `email-proxy.ts` | Optional local SparkPost development proxy. |
+| `email-proxy.ts` | Optional loopback-only SparkPost development proxy. |
+
+## Scripts
+
+| Script | Purpose |
+| --- | --- |
+| `scripts/export-audit.mjs` | Playwright-driven export audit that downloads HTML, PDF, DOCX, ODT, fallback email HTML, and MJML email HTML, then checks screenshots and package contents. |
 
 ## Utilities
 
@@ -119,6 +126,7 @@ Tests sit beside the modules they cover and import `src/test-setup.ts`. Current 
 - Cache behavior
 - Element defaults
 - Email export
+- DOCX and ODT package structure
 - Export fallback controller
 - Browser download helper
 - HTML export

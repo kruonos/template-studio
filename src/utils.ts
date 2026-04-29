@@ -139,7 +139,7 @@ export function isResizeHandle(value: string | undefined): value is ResizeHandle
 }
 
 export function isExportFormat(value: string | undefined): value is ExportFormat {
-  return value === 'html' || value === 'pdf' || value === 'docx' || value === 'email-html' || value === 'email-text' || value === 'json'
+  return value === 'html' || value === 'pdf' || value === 'docx' || value === 'odt' || value === 'email-html' || value === 'email-text' || value === 'json'
 }
 
 export function isTextualElement(type: ElementType): boolean {

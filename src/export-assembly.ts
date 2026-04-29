@@ -14,6 +14,7 @@ import { escapeAttribute, escapeHtml, escapeXml, roundTo } from './utils.ts'
 type ExportAssemblyHooks = {
   state: StudioState
   docxMime: string
+  odtMime: string
   buildExportSnapshot: () => ExportSnapshot
   resolveVariables: (text: string) => string
   normalizeHref: (value: string) => string | null
@@ -48,11 +49,11 @@ type ExportAssemblyHooks = {
   showToast: (message: string) => void
 }
 
-export function renderAbsoluteHtmlTableExport(element: CanvasElement, tableData: TableData, hooks: Pick<ExportAssemblyHooks, 'getResolvedTableCellContent' | 'getTableCellRenderState' | 'formatTableBorderCss'>): string {
+export function renderAbsoluteHtmlTableExport(element: CanvasElement, tableData: TableData, hooks: Pick<ExportAssemblyHooks, 'getResolvedTableCellContent' | 'getTableCellRenderState' | 'formatTableBorderCss'>, pageTop = element.y): string {
   const visitedCells = new Set<string>()
   const parts: string[] = []
 
-  parts.push(`<div style="position:absolute;left:${roundTo(element.x, 2)}px;top:${roundTo(element.y, 2)}px;width:${roundTo(element.width, 2)}px;height:${roundTo(element.height, 2)}px;overflow:hidden;">`)
+  parts.push(`<div style="position:absolute;left:${roundTo(element.x, 2)}px;top:${roundTo(pageTop, 2)}px;width:${roundTo(element.width, 2)}px;height:${roundTo(element.height, 2)}px;overflow:hidden;">`)
 
   for (let row = 0; row < tableData.rows; row += 1) {
     for (let col = 0; col < tableData.cols; col += 1) {
@@ -74,7 +75,10 @@ export function renderAbsoluteHtmlTableExport(element: CanvasElement, tableData:
       const bgCss = bg.length > 0 ? `background:${escapeAttribute(bg)};` : ''
       parts.push(`<div style="position:absolute;left:${roundTo(rect.x, 2)}px;top:${roundTo(rect.y, 2)}px;width:${roundTo(rect.width, 2)}px;height:${roundTo(rect.height, 2)}px;border-top:${escapeAttribute(hooks.formatTableBorderCss(borderTop))};border-right:${escapeAttribute(hooks.formatTableBorderCss(borderRight))};border-bottom:${escapeAttribute(hooks.formatTableBorderCss(borderBottom))};border-left:${escapeAttribute(hooks.formatTableBorderCss(borderLeft))};${bgCss}overflow:hidden;">`)
       for (const line of projection.lines) {
-        parts.push(`<div style="position:absolute;left:${roundTo(line.x, 2)}px;top:${roundTo(line.y, 2)}px;white-space:pre;font:${escapeAttribute(projection.font)};line-height:${projection.lineHeight}px;color:${escapeAttribute(projection.color)};text-decoration:${escapeAttribute(projection.textDecoration)};">${escapeHtml(line.text)}</div>`)
+        const relativeLine = isTableProjectionLineRelative(line, rect)
+        const lineLeft = relativeLine ? line.x : line.x - element.x - rect.x
+        const lineTop = relativeLine ? line.y : line.y - element.y - rect.y
+        parts.push(`<div style="position:absolute;left:${roundTo(lineLeft, 2)}px;top:${roundTo(lineTop, 2)}px;white-space:pre;font:${escapeAttribute(projection.font)};line-height:${projection.lineHeight}px;color:${escapeAttribute(projection.color)};text-decoration:${escapeAttribute(projection.textDecoration)};">${escapeHtml(line.text)}</div>`)
       }
       parts.push('</div>')
     }
@@ -82,6 +86,10 @@ export function renderAbsoluteHtmlTableExport(element: CanvasElement, tableData:
 
   parts.push('</div>')
   return parts.join('')
+}
+
+function isTableProjectionLineRelative(line: TextProjection['lines'][number], rect: { width: number; height: number }): boolean {
+  return line.x >= -1 && line.x <= rect.width + 1 && line.y >= -1 && line.y <= rect.height + 1
 }
 
 export async function buildPdfBlob(hooks: ExportAssemblyHooks): Promise<Blob> {
@@ -114,7 +122,7 @@ export function buildAbsoluteHtmlDocument(
     autoPrint: options.autoPrint,
   }, {
     resolveVariables: hooks.resolveVariables,
-    renderAbsoluteHtmlTableExport: (element, tableData) => renderAbsoluteHtmlTableExport(element, tableData, hooks),
+    renderAbsoluteHtmlTableExport: (element, tableData, pageTop) => renderAbsoluteHtmlTableExport(element, tableData, hooks, pageTop),
     getButtonHref: element => hooks.normalizeHref(hooks.resolveVariables(element.styles.href ?? '')),
     getImageSource: hooks.getImageSource,
     getAnimatedGifSource: hooks.getAnimatedGifSource,
@@ -230,4 +238,19 @@ export async function buildDocxBlob(hooks: ExportAssemblyHooks): Promise<Blob> {
       getVideoHref: hooks.getVideoHref,
     },
   }, hooks.docxMime)
+}
+
+export async function buildOdtBlob(hooks: ExportAssemblyHooks): Promise<Blob> {
+  const { buildOdtBlob: buildOdtBlobExport } = await import('./odt-export.ts')
+  const snapshot = hooks.buildExportSnapshot()
+  return buildOdtBlobExport(snapshot, {
+    resolveVariables: hooks.resolveVariables,
+    getElementFontFamily: hooks.getElementFontFamily,
+    getElementFontSize: hooks.getElementFontSize,
+    getButtonHref: element => hooks.normalizeHref(hooks.resolveVariables(element.styles.href ?? '')),
+    getImageSource: hooks.getImageSource,
+    getAnimatedGifSource: hooks.getAnimatedGifSource,
+    getMascotSource: hooks.getMascotSource,
+    getVideoHref: hooks.getVideoHref,
+  }, hooks.odtMime)
 }
